@@ -1,14 +1,15 @@
 name = "edilrepairstechnology"
-main = "src/worker.js"
-compatibility_date = "2024-06-20"
+main = "index.js"
+compatibility_date = "2024-01-30"
 
 [vars]
-# se hai già WHEP_URL completo NON serve WHEP_BASE
-WHEP_BASE = "https://screenstream.io/whep"
-WHEP_URL  = "https://screenstream.io/whep/72500366"
+# scegli UNO dei due modi:
+# 1) Diretto:
+WHEP_URL = "https://screenstream.io/whep/72500366"
 
-# usa le tue credenziali di visione dello stream
-STREAM_ID = "72500366"
-# STREAM_PASS: mettila come secret
+# 2) Oppure componi:
+# WHEP_BASE = "https://screenstream.io/whep"
+# STREAM_ID = "72500366"
 
-# cors aperto (già nel worker)
+# In entrambi i casi serve la password:
+STREAM_PASS = "VDPfNM"

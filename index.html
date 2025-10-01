@@ -24,6 +24,7 @@
             backdrop-filter: blur(10px); border:1px solid rgba(255,255,255,.08) }
     .brand-grad{ background: linear-gradient(90deg, var(--acc), var(--acc2)); }
 
+    /* LIVE layout */
     .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
     .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
     .stream-media{ width:100%; height:100%; object-fit:contain; background:#000 }
@@ -40,6 +41,14 @@
     .tab-btn.active{ color:#fff; border-color: var(--acc2); }
 
     .badge{ display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.2rem .5rem; border-radius:.5rem; border:1px solid transparent }
+
+    /* === Viewer LAN in-box (popup nel riquadro live) === */
+    #lanOverlay { position:absolute; inset:0; display:none; background:rgba(0,0,0,.85); z-index:30; }
+    #lanOverlay.show{ display:block; }
+    #lanToolbar { position:absolute; left:0; right:0; top:0; height:40px; display:flex; align-items:center; justify-content:space-between; padding:.25rem .5rem; background:rgba(2,6,23,.85); border-bottom:1px solid rgba(255,255,255,.08) }
+    #lanFrame { position:absolute; inset:40px 0 0 0; width:100%; height:calc(100% - 40px); border:0; background:#000; }
+    #lanBlocked { position:absolute; inset:40px 0 0 0; display:none; align-items:center; justify-content:center; text-align:center; padding:1rem; }
+    #lanBlocked.show{ display:flex; }
   </style>
 </head>
 <body>
@@ -100,9 +109,36 @@
           </div>
           <div class="stream-box" id="liveStreamBox">
             <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessun URL stream configurato</div>
-            <iframe id="phoneIframe" class="hidden stream-media" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-forms allow-pointer-lock"></iframe>
+            <iframe id="phoneIframe" class="hidden stream-media" referrerpolicy="no-referrer" loading="lazy"></iframe>
             <img id="phoneMjpeg" class="hidden stream-media" alt="Anteprima MJPEG" />
             <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
+
+            <!-- === Viewer LAN in-box (popup nello stesso riquadro) === -->
+            <div id="lanOverlay">
+              <div id="lanToolbar">
+                <div class="text-xs text-slate-300 truncate">
+                  <span class="opacity-60">Viewer LAN:</span>
+                  <span id="lanUrlLabel" class="font-mono"></span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button id="lanReplace" class="px-2 py-1 rounded bg-amber-500/90 text-slate-900 text-xs">Apri qui (sostituisce scheda)</button>
+                  <button id="lanExternal" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri in nuova finestra</button>
+                  <button id="lanClose" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Chiudi</button>
+                </div>
+              </div>
+              <iframe id="lanFrame"></iframe>
+              <div id="lanBlocked" class="text-sm text-slate-300">
+                <div>
+                  <div class="mb-2">Contenuto HTTP bloccato in pagina HTTPS (Mixed Content).</div>
+                  <div class="text-xs text-slate-400 mb-3">Non è possibile visualizzare la pagina della camera <em>dentro</em> questo riquadro quando l’app è su HTTPS.</div>
+                  <div class="flex items-center justify-center gap-2">
+                    <button id="lanOpenExternal2" class="px-3 py-1.5 rounded bg-emerald-600/90 hover:bg-emerald-600 text-xs">Apri in nuova finestra</button>
+                    <button id="lanReplace2" class="px-3 py-1.5 rounded bg-amber-500/90 text-slate-900 text-xs">Apri qui (sostituisce scheda)</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- === /Viewer LAN === -->
           </div>
         </div>
 
@@ -196,7 +232,7 @@
   </div>
 
 <script>
-/**************** CONFIG DI FABBRICA ****************/
+/**************** CONFIG ****************/
 const DEFAULTS = {
   CLIENT_ID: "",
   API_KEY: "",
@@ -206,10 +242,15 @@ const DEFAULTS = {
   LOGIN_HINT: ""
 };
 
-/** ENDPOINT DEL TUO WORKER WHEP **/
+/** Endpoint del tuo Worker WHEP (se lo usi) **/
 const WORKER_WHEP = 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep';
 
-// DEFAULT FILIALI (campi WebRTC inclusi)
+/**************** STATO ****************/
+let cfg = {};
+let tokenClient;
+let gmailReady = false;
+
+// Default filiali
 const DEFAULT_FILIALI = [
   { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
   { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
@@ -221,7 +262,6 @@ function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
   state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
-  // fallback automatico al Worker + chiavi nuove
   state.filiali.forEach(f=>{
     if(!f.streamUrl) f.streamUrl = WORKER_WHEP;
     if(typeof f.streamUser!=='string') f.streamUser='';
@@ -241,7 +281,6 @@ const $ = (sel)=> document.querySelector(sel);
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild }
 function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) }
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
-function originsString(){ const host = location.host; return `https://${host}` }
 function isInsecureOnHttps(u){ try{ const p = new URL(u, location.href); return location.protocol==='https:' && p.protocol==='http:'; } catch{ return false; } }
 function normalizeText(s){ return (s||'').replace(/[–—−]/g,'-').replace(/\s+/g,' ').trim(); }
 function buildStreamUrlWithCreds(base, user, pass){
@@ -249,7 +288,7 @@ function buildStreamUrlWithCreds(base, user, pass){
   try{ const u=new URL(base, location.href); if(user) u.username=user; if(pass) u.password=pass; return u.toString(); }catch{ return base; }
 }
 
-/**************** LIVE SIZER ****************/
+/*********** LIVE height ***********/
 function uiBindLiveSizer() {
   const input = $('#liveSize');
   const box = $('#liveStreamBox');
@@ -264,8 +303,62 @@ function uiBindLiveSizer() {
   });
 }
 
-/**************** CHECK FILIALI UX ****************/
-function runCheckFiliali() {
+/**************** “Viewer LAN” (popup nel riquadro) ****************/
+function openLanOverlay(url){
+  const overlay = $('#lanOverlay');
+  const frame = $('#lanFrame');
+  const blocked = $('#lanBlocked');
+  const urlLbl = $('#lanUrlLabel');
+  if(!overlay || !frame || !blocked) return;
+
+  urlLbl.textContent = url;
+  overlay.classList.add('show');
+  blocked.classList.remove('show');
+  frame.removeAttribute('src'); // reset
+
+  // Prova a caricare dentro l'iframe
+  // Se Mixed Content, il browser lo blocca e l'onload non scatterà: mostriamo il messaggio dopo un piccolo timeout
+  let loaded = false;
+  frame.onload = () => { loaded = true; blocked.classList.remove('show'); };
+  // NB: niente 'sandbox' per non complicare l'embed; è comunque cross-origin.
+  frame.src = url;
+
+  setTimeout(()=>{
+    if(!loaded){
+      // quasi sicuramente Mixed Content bloccato
+      blocked.classList.add('show');
+    }
+  }, 900);
+
+  // Toolbar buttons
+  const openExt = $('#lanExternal'), openExt2 = $('#lanOpenExternal2');
+  const replace = $('#lanReplace'), replace2 = $('#lanReplace2');
+  const closeBtn = $('#lanClose');
+
+  function openWindow(){
+    const w = 420, h = 820;
+    const left = Math.round((screen.width - w)/2);
+    const top  = Math.round((screen.height - h)/2);
+    const feat = `popup=yes,width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=no,noopener,noreferrer`;
+    const win = window.open(url, 'resinelli_live', feat);
+    if(!win) alert('Popup bloccato dal browser. Consenti i popup per questo sito.');
+    else win.focus();
+  }
+  openExt?.addEventListener('click', openWindow, {once:true});
+  openExt2?.addEventListener('click', openWindow, {once:true});
+
+  function replaceHere(){ location.href = url; }
+  replace?.addEventListener('click', replaceHere, {once:true});
+  replace2?.addEventListener('click', replaceHere, {once:true});
+
+  closeBtn?.addEventListener('click', ()=>{
+    frame.removeAttribute('src');
+    overlay.classList.remove('show');
+  }, {once:true});
+}
+
+/**************** CHECK/UX, STORICO (come prima) ****************/
+function runCheckFiliali(){ /* identico a prima, per brevità è invariato */ 
   const rowsWrap = document.getElementById('checkFilialiRows');
   rowsWrap.innerHTML = '';
   (state.filiali || []).forEach(filiale => {
@@ -306,15 +399,12 @@ function runCheckFiliali() {
           }
           const t = isFinite(last.temp) ? `${last.temp.toFixed(1)} °C` : '—';
           const r = (isFinite(min) && isFinite(max)) ? `${min}–${max} °C` : '—';
-          if (cella || isFinite(last.temp) || (isFinite(min)&&isFinite(max))){
-            details = ` · Cella ${cella || '—'} – ${t} (range ${r})`;
-          }
+          if (cella || isFinite(last.temp) || (isFinite(min)&&isFinite(max))){ details = ` · Cella ${cella || '—'} – ${t} (range ${r})`; }
         }
 
         if(hasAlarm){
           status.innerHTML = `<button class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</button>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}${details}`;
-          const btn = status.querySelector('button');
-          if (btn && last) btn.onclick = () => uiOpenRowDetails(last, filiale.name);
+          const btn = status.querySelector('button'); if (btn && last) btn.onclick = () => uiOpenRowDetails(last, filiale.name);
         } else {
           status.innerHTML = `<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}`;
         }
@@ -324,10 +414,8 @@ function runCheckFiliali() {
   });
 }
 
-/**************** DESCRIZIONE PER FILIALE (Home) ****************/
-function uiRenderFilialiDesc() {
-  const wrap = $('#filialiDescWrap');
-  wrap.innerHTML = '';
+function uiRenderFilialiDesc(){ /* invariato come prima */ 
+  const wrap = $('#filialiDescWrap'); wrap.innerHTML = '';
   state.filiali.forEach(filiale => {
     const rows = state.history[filiale.id] || [];
     const hasAlarm = rows.some(r => r.status === 'alto');
@@ -337,29 +425,18 @@ function uiRenderFilialiDesc() {
       <span class="${hasAlarm? 'px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30 cursor-pointer' : 'px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${hasAlarm?'ALLARME':'OK'}</span>
       ${last? `<span class="ml-2 text-xs text-slate-400">${fmtDate(new Date(last.date))}</span>` : ''}
     </div>`);
-    if(hasAlarm){
-      card.querySelector('span:nth-child(2)').onclick = ()=> last && uiOpenRowDetails(last, filiale.name);
-      card.querySelector('span:nth-child(2)').title = 'Clicca per dettagli';
-    }
+    if(hasAlarm){ card.querySelector('span:nth-child(2)').onclick = ()=> last && uiOpenRowDetails(last, filiale.name); card.querySelector('span:nth-child(2)').title = 'Clicca per dettagli'; }
     wrap.appendChild(card);
   });
 }
 
-/**************** POPUP DETTAGLI ****************/
-function uiOpenRowDetails(row, filialeName) {
-  const modal = $('#rowModal');
-  const body = $('#rowModalBody');
-
-  let cella = '';
-  let filiale = filialeName || '';
-  let subject = row.subject || '';
-  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—';
-  let minmax = '—';
-
+function uiOpenRowDetails(row, filialeName){ /* invariato come prima */ 
+  const modal = $('#rowModal'); const body = $('#rowModalBody');
+  let cella = ''; let filiale = filialeName || ''; let subject = row.subject || '';
+  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—'; let minmax = '—';
   const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
   if (m) { cella = m[1].trim(); filiale = m[2].trim(); } else { cella = subject; }
   if (isFinite(row.min) && isFinite(row.max)) { minmax = row.min + '–' + row.max + ' °C'; }
-
   body.innerHTML = `
     <div class="mb-2 text-lg font-semibold">${cella}</div>
     <div class="mb-2 text-sm text-slate-400">Filiale: <span class="font-medium text-slate-200">${filiale}</span></div>
@@ -374,14 +451,9 @@ function uiOpenRowDetails(row, filialeName) {
   modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
 }
 
-/**************** ROUTER ****************/
+/**************** ROUTER & STATUS ****************/
 const routes = ['home','storico','impostazioni'];
-function setActiveTab(hash){
-  document.querySelectorAll('.tab-btn').forEach(b=>{
-    const r=b.getAttribute('data-route');
-    b.classList.toggle('active', r===hash);
-  });
-}
+function setActiveTab(hash){ document.querySelectorAll('.tab-btn').forEach(b=>{ const r=b.getAttribute('data-route'); b.classList.toggle('active', r===hash); }); }
 function go(route){
   routes.forEach(r=> document.getElementById('route-'+r).classList.toggle('hidden', r!==route));
   $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
@@ -391,20 +463,13 @@ function go(route){
   if(route==='impostazioni') renderImpostazioni();
   history.replaceState(null, '', '#'+route);
 }
-window.addEventListener('hashchange', ()=>{
-  const r = (location.hash||'#home').slice(1);
-  if(routes.includes(r)) go(r);
-});
+window.addEventListener('hashchange', ()=>{ const r = (location.hash||'#home').slice(1); if(routes.includes(r)) go(r); });
 
-/**************** STATUS BAR (globale) ****************/
 function checkFilialiStatus(){
-  const bar = $('#statusBar'); const badges = $('#statusBadges');
-  badges.innerHTML = '';
+  const bar = $('#statusBar'); const badges = $('#statusBadges'); badges.innerHTML = '';
   const items = state.filiali.map(f=>{
-    const rows = (state.history[f.id]||[]);
-    const last = rows.slice().sort((a,b)=>b.date-a.date)[0];
-    const isAlarm = !!rows.find(r=>r.status==='alto');
-    return { name:f.name, last, isAlarm };
+    const rows = (state.history[f.id]||[]); const last = rows.slice().sort((a,b)=>b.date-a.date)[0];
+    const isAlarm = !!rows.find(r=>r.status==='alto'); return { name:f.name, last, isAlarm };
   });
   if(!items.length){ bar.classList.add('hidden'); return }
   items.forEach(it=>{
@@ -415,10 +480,7 @@ function checkFilialiStatus(){
 }
 
 /**************** IMPOSTAZIONI & STORICO ****************/
-function populateFilialeSelect(){
-  const sel = $('#filialeSelect');
-  sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
-}
+function populateFilialeSelect(){ const sel = $('#filialeSelect'); sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join(''); }
 
 function renderImpostazioni(){
   $('#usernameInput').value = state.username || '';
@@ -432,14 +494,14 @@ function renderImpostazioni(){
         <label class="block text-sm text-slate-300">Email storico
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
-        <label class="block text-sm text-slate-300">URL stream (WHEP/HTTPS)
-          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://<tuo-worker>.workers.dev/whep" />
+        <label class="block text-sm text-slate-300">URL stream
+          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://<worker>/whep oppure http://192.168.x.x:8080" />
         </label>
         <label class="block text-sm text-slate-300">ID stream
-          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="(opzionale: non serve con Worker)" />
+          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="(se richiesto)" />
         </label>
         <label class="block text-sm text-slate-300">Password
-          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="(opzionale: non serve con Worker)" />
+          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="(se richiesto)" />
         </label>
         <label class="block text-sm text-slate-300">Modalità
           <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
@@ -455,7 +517,7 @@ function renderImpostazioni(){
       </div>
       <div class="mt-3 flex flex-wrap justify-between gap-2">
         <div class="text-[11px] text-slate-400">
-          WebRTC richiede HTTPS e CORS; usa il tuo Worker come endpoint. <br/>Se l’embed non appare, prova “Apri stream”.
+          Se l’URL è <b>HTTP</b> e questa pagina è <b>HTTPS</b>, l’embed sarà bloccato. Usa il pulsante nel riquadro LIVE per il Viewer LAN.
         </div>
         <div class="flex gap-2">
           <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri stream</button>
@@ -526,8 +588,8 @@ function renderStorico(){
   }
 }
 
-/**************** ====== STREAM (WebRTC WHEP + fallback) ====== ****************/
-let webrtcSession = null; // {pc, resourceUrl, videoEl, authHeaders}
+/**************** ====== STREAM (WebRTC WHEP + fallback + Viewer LAN) ====== ****************/
+let webrtcSession = null;
 
 function cleanupWebRTC(){
   try{
@@ -540,19 +602,11 @@ function cleanupWebRTC(){
   }catch{}
   webrtcSession = null;
 }
-
 async function stopWhepResource(){
   if(webrtcSession?.resourceUrl){
-    try{
-      await fetch(webrtcSession.resourceUrl, {
-        method:'DELETE',
-        mode:'cors',
-        headers: webrtcSession.authHeaders || {}
-      });
-    }catch{}
+    try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{}
   }
 }
-
 function extractCredsFromUrl(u){
   try{
     const url = new URL(u, location.href);
@@ -560,19 +614,16 @@ function extractCredsFromUrl(u){
     const pass = url.password || '';
     url.username = ''; url.password = '';
     return { user, pass, sanitized: url.toString() };
-  }catch{
-    return { user:'', pass:'', sanitized:u || '' };
-  }
+  }catch{ return { user:'', pass:'', sanitized:u || '' }; }
 }
-
 function makeBasicAuthHeaders(user, pass){
   if(!user && !pass) return {};
   const token = btoa(`${user||''}:${pass||''}`);
   return { 'Authorization': `Basic ${token}` };
 }
-
 async function startWhep(finalUrl, withAudio, extraHeaders = {}){
   const video = $('#webrtcVideo');
+  const none = $('#noStream');
   video.classList.remove('hidden');
   video.muted = !withAudio;
   video.playsInline = true;
@@ -580,7 +631,6 @@ async function startWhep(finalUrl, withAudio, extraHeaders = {}){
   const pc = new RTCPeerConnection({ iceServers: [{urls:'stun:stun.l.google.com:19302'}] });
 
   const onError = (msg) => {
-    const none = $('#noStream');
     none.classList.remove('hidden');
     none.innerHTML = `
       <div class="space-y-2 text-center">
@@ -598,7 +648,7 @@ async function startWhep(finalUrl, withAudio, extraHeaders = {}){
     const [stream] = ev.streams;
     if (stream) {
       video.srcObject = stream;
-      video.play().catch(()=>{ /* su iOS l'utente premerà play */ });
+      video.play().catch(()=>{});
     }
   };
 
@@ -607,31 +657,23 @@ async function startWhep(finalUrl, withAudio, extraHeaders = {}){
 
   let res;
   try{
-    res = await fetch(finalUrl, {
-      method: 'POST',
-      headers: { 'Content-Type':'application/sdp', ...extraHeaders },
-      body: offer.sdp,
-      mode: 'cors',
-    });
-  }catch(e){
-    onError('Connessione WHEP non raggiungibile (CORS/HTTPS).');
-    throw e;
-  }
-  if(!res.ok){
-    onError('Il server WHEP ha rifiutato la richiesta ('+res.status+').');
-    return;
-  }
+    res = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type':'application/sdp', ...extraHeaders }, body: offer.sdp, mode: 'cors' });
+  }catch(e){ onError('Connessione WHEP non raggiungibile (CORS/HTTPS).'); throw e; }
+  if(!res.ok){ onError('Il server WHEP ha rifiutato la richiesta ('+res.status+').'); return; }
 
   const answerSdp = await res.text();
-  const resourceUrl = res.headers.get('Location'); // riscritto dal Worker
+  const resourceUrl = res.headers.get('Location');
   await pc.setRemoteDescription({type:'answer', sdp:answerSdp});
-
   webrtcSession = { pc, resourceUrl, videoEl: video, authHeaders: extraHeaders };
 }
 
 function applyStreamForCurrent(){
   const id = $('#filialeSelect').value; const f = state.filiali.find(x=>x.id===id);
   const iframe = $('#phoneIframe'); const img = $('#phoneMjpeg'); const none = $('#noStream'); const video = $('#webrtcVideo'); const liveBox = $('#liveStreamBox');
+
+  // chiudi overlay LAN
+  $('#lanOverlay')?.classList.remove('show');
+  $('#lanFrame')?.removeAttribute('src');
 
   stopWhepResource().finally(cleanupWebRTC);
 
@@ -650,33 +692,42 @@ function applyStreamForCurrent(){
   const mode = f.streamMode || 'webrtc';
   none.classList.add('hidden');
 
-  if(mode==='webrtc'){
-    // Se usi il Worker, non serve Authorization (è gestita lato server)
-    let authHeaders = {};
-    try {
-      const host = new URL(bareUrl).host;
-      if (!/\.workers\.dev$/i.test(host)) {
-        // solo se NON è il worker (caso avanzato)
-        authHeaders = makeBasicAuthHeaders(user, pass);
-      }
-    } catch {}
+  // === Caso LAN HTTP su pagina HTTPS → usa Viewer LAN nel riquadro ===
+  const isMixed = isInsecureOnHttps(bareUrl);
+  if(isMixed){
+    none.classList.remove('hidden');
+    none.innerHTML = `
+      <div class="space-y-2 text-center">
+        <div class="text-slate-300 text-sm">Lo stream è <b>HTTP</b> e la pagina è <b>HTTPS</b>: incorporamento bloccato dal browser.</div>
+        <div class="text-xs text-slate-400">Puoi usare il <b>Viewer LAN</b> nel riquadro o aprire lo stream in una nuova finestra.</div>
+        <div class="mt-2 flex items-center justify-center gap-2">
+          <button id="btnLanInBox" class="px-3 py-1.5 rounded bg-emerald-600/90 hover:bg-emerald-600 text-xs">Apri nella finestra LIVE</button>
+          <a href="${bareUrl}" target="_blank" rel="noopener" class="inline-block px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri in nuova finestra</a>
+        </div>
+      </div>`;
+    $('#btnLanInBox')?.addEventListener('click', ()=> openLanOverlay(bareUrl));
+    // Badge informativo
+    const badgeDiv = document.createElement('div');
+    badgeDiv.className = "mixed-content-badge absolute top-2 right-2 px-2 py-0.5 rounded bg-amber-500/80 text-amber-900 text-xs font-semibold shadow";
+    badgeDiv.textContent = "⚠ Mixed content";
+    liveBox.appendChild(badgeDiv);
+    return;
+  }
 
+  // === Modalità standard ===
+  if(mode==='webrtc'){
+    let authHeaders = {};
+    try { const host = new URL(bareUrl).host; if (!/\.workers\.dev$/i.test(host)) authHeaders = makeBasicAuthHeaders(user, pass); } catch {}
     if ((user||pass) && Object.keys(authHeaders).length){
       const b = document.createElement('div');
       b.className = "auth-badge absolute top-2 left-2 badge bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
       b.textContent = "🔒 HTTPS + Auth";
       liveBox.appendChild(b);
     }
-    if (isInsecureOnHttps(bareUrl)) {
-      none.classList.remove('hidden');
-      none.innerHTML = `<div class="space-y-2 text-center"><div class="text-slate-300 text-sm">Lo stream è HTTP e non può essere caricato su HTTPS.</div></div>`;
-      return;
-    }
     startWhep(bareUrl, !!f.streamAudio, authHeaders).catch(()=>{});
     return;
   }
 
-  // Fallback (iframe / mjpeg)
   const urlForEmbed = buildStreamUrlWithCreds(bareUrl, user, pass);
 
   if(mode==='iframe'){
@@ -688,7 +739,7 @@ function applyStreamForCurrent(){
         none.innerHTML = `
           <div class="space-y-2 text-center">
             <div class="text-slate-300 text-sm">Lo stream potrebbe essere bloccato dall’host (X-Frame-Options/Frame-Ancestors).</div>
-            <a href="${urlForEmbed}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova scheda</a>
+            <a href="${urlForEmbed}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova finestra</a>
           </div>`;
       }
     }, 2000);
@@ -729,136 +780,63 @@ function initGIS(){
   window.tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: cfg.CLIENT_ID,
     scope: (cfg?.SCOPES || "https://www.googleapis.com/auth/gmail.readonly"),
-    callback: (resp)=>{
-      if (resp?.access_token){
-        gapi.client.setToken({ access_token: resp.access_token });
-        gmailReady = true;
-      }
-    }
+    callback: (resp)=>{ if (resp?.access_token){ gapi.client.setToken({ access_token: resp.access_token }); gmailReady = true; } }
   });
 }
-function signOut(){
-  try{
-    const tok = gapi?.client?.getToken?.();
-    if (tok?.access_token) google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{});
-    gapi?.client?.setToken?.(null);
-  }catch{}
-  gmailReady = false;
-}
+function signOut(){ try{ const tok = gapi?.client?.getToken?.(); if (tok?.access_token) google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{}); gapi?.client?.setToken?.(null);}catch{} gmailReady = false; }
 function signIn(){
   return new Promise( async (resolve, reject)=>{
     try{
       if (!window.gapi?.client) { await initGapi(); }
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-        alert('Inserisci prima il CLIENT_ID in Impostazioni avanzate.');
-        openAdvancedModal();
-        return reject(new Error('CLIENT_ID mancante'));
-      }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { alert('Inserisci prima il CLIENT_ID in Impostazioni avanzate.'); openAdvancedModal(); return reject(new Error('CLIENT_ID mancante')); }
       if (!window.tokenClient) { initGIS(); }
-
       try{ window.google?.accounts?.id?.disableAutoSelect?.(); }catch{}
-      try{
-        const tok = window.gapi?.client?.getToken?.();
-        if (tok?.access_token) window.google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{});
-        window.gapi?.client?.setToken?.(null);
-      }catch{}
-
+      try{ const tok = window.gapi?.client?.getToken?.(); if (tok?.access_token) window.google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{}); window.gapi?.client?.setToken?.(null);}catch{}
       window.tokenClient.callback = (r)=> r?.access_token ? resolve(r) : reject(r);
-      window.tokenClient.requestAccessToken({
-        prompt: 'consent select_account',
-        include_granted_scopes: false
-      });
+      window.tokenClient.requestAccessToken({ prompt: 'consent select_account', include_granted_scopes: false });
     }catch(e){ reject(e); }
   });
 }
 
-/**************** GMAIL (parsing robusto) ****************/
+/**************** GMAIL (parsing) ****************/
 async function listMessages(q, max=200){ let msgs=[], pageToken; do{ const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken}); const d=res.result; if(d.messages) msgs.push(...d.messages); pageToken=d.nextPageToken } while(pageToken && msgs.length<max); return msgs }
 async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result }
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
 function getHeader(msg, name){ const h = msg.payload.headers.find(h=>h.name.toLowerCase()===name.toLowerCase()); return h? h.value: '' }
-
 function parseTemperatures(subject, body){
-  const s = normalizeText(subject);
-  const b = normalizeText(body);
-
-  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i)
-              || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
-
+  const s = normalizeText(subject); const b = normalizeText(body);
+  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i) || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
   const mRange = b.match(/Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i);
-
-  let temp = mTemp ? toNumber(mTemp[1]) : NaN;
-  const min = mRange ? toNumber(mRange[1]) : NaN;
-  const max = mRange ? toNumber(mRange[2]) : NaN;
-
-  // Fallback più prudente: evita di prendere numeri da elenchi (- 58.0, ecc.)
+  let temp = mTemp ? toNumber(mTemp[1]) : NaN; const min = mRange ? toNumber(mRange[1]) : NaN; const max = mRange ? toNumber(mRange[2]) : NaN;
+  if(!isFinite(temp)){ const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i); if (near) temp = toNumber(near[1]); }
   if(!isFinite(temp)){
-    // cerca numeri vicino a "°C" o "gradi"
-    const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i);
-    if (near) temp = toNumber(near[1]);
-  }
-  if(!isFinite(temp)){
-    // altrimenti primo numero FUORI dal range "da..a" (se presente)
     const all = [...b.matchAll(/-?\d+(?:[.,]\d+)?/g)].map(m=>({v:toNumber(m[0]), i:m.index}));
-    if (mRange) {
-      const rs = mRange.index, re = rs + mRange[0].length;
-      const candidates = all.filter(n => n.i < rs || n.i > re);
-      if (candidates.length) temp = candidates[0].v;
-    } else if (all.length){
-      temp = all[0].v;
-    }
+    if (mRange) { const rs = mRange.index, re = rs + mRange[0].length; const candidates = all.filter(n => n.i < rs || n.i > re); if (candidates.length) temp = candidates[0].v; }
+    else if (all.length){ temp = all[0].v; }
   }
   return { temp, min, max };
 }
-
 async function fetchAlarms(){
-  const q = cfg.GMAIL_QUERY;
-  const msgs = await listMessages(q, 500);
+  const q = cfg.GMAIL_QUERY; const msgs = await listMessages(q, 500);
   for(const m of msgs){
-    const msg = await getMessage(m.id);
-    const subject = getHeader(msg,'Subject')||'(senza oggetto)';
-    const d = new Date(Number(msg.internalDate));
-    let body='';
-    (function extract(part){
-      if(!part) return;
-      if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; }
-      if(part.parts) part.parts.forEach(extract);
-      if(part.mimeType==='text/html' && !body && part.body?.data){
-        body = decodeBody(part.body.data).replace(/<[^>]+>/g,' ');
-      }
-    })(msg.payload);
-
+    const msg = await getMessage(m.id); const subject = getHeader(msg,'Subject')||'(senza oggetto)'; const d = new Date(Number(msg.internalDate));
+    let body=''; (function extract(part){ if(!part) return; if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; } if(part.parts) part.parts.forEach(extract); if(part.mimeType==='text/html' && !body && part.body?.data){ body = decodeBody(part.body.data).replace(/<[^>]+>/g,' '); } })(msg.payload);
     const { temp, min, max } = parseTemperatures(subject, body);
-
-    const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
-    const ms = subject.match(RX_SUBJ_CELL);
-
+    const ms = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
     const low = (subject + '\n' + body).toLowerCase();
     const isAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(low);
     if(!isAlarm) continue;
-
     const sito = ms ? ms[2].trim() : '';
-    const fid = (function(){
-      if(sito){
-        const needle = sito.toLowerCase().trim();
-        const byHint = state.filiali.find(f => f.name.toLowerCase().includes(needle));
-        if(byHint) return byHint.id;
-      }
-      for(const f of state.filiali){ if(low.includes(f.name.toLowerCase())) return f.id }
-      return $('#filialeSelect').value || state.filiali[0]?.id;
-    })();
-
+    const fid = (function(){ if(sito){ const needle = sito.toLowerCase().trim(); const byHint = state.filiali.find(f => f.name.toLowerCase().includes(needle)); if(byHint) return byHint.id; } for(const f of state.filiali){ if(low.includes(f.name.toLowerCase())) return f.id } return $('#filialeSelect').value || state.filiali[0]?.id; })();
     const row = { date:+d, temp, min, max, status:'alto', subject, id:m.id, bodyPlain: body };
     if(!state.history[fid]) state.history[fid]=[];
     if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
   }
   for(const fid of Object.keys(state.history)){ state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000) }
-  saveState();
-  checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
-  if(location.hash==='#storico') renderStorico();
+  saveState(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); if(location.hash==='#storico') renderStorico();
 }
 
-/******************* OPEN ADVANCED MODAL (helper) *******************/
+/**************** ADVANCED MODAL ****************/
 function openAdvancedModal() {
   const modal = document.getElementById('advModal');
   const gate  = document.getElementById('advGate');
@@ -884,12 +862,8 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   loadState();
   populateFilialeSelect();
 
-  document.querySelectorAll('.route-btn').forEach(b=>{
-    b.addEventListener('click', ()=> go(b.dataset.route.slice(1)));
-  });
-  const initial = (location.hash || '#home');
-  setActiveTab(initial);
-  go((initial||'#home').slice(1));
+  document.querySelectorAll('.route-btn').forEach(b=>{ b.addEventListener('click', ()=> go(b.dataset.route.slice(1))); });
+  const initial = (location.hash || '#home'); setActiveTab(initial); go((initial||'#home').slice(1));
 
   $('#filialeSelect').addEventListener('change', ()=> applyStreamForCurrent());
 
@@ -908,54 +882,23 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       streamMode: 'webrtc',
       streamAudio: false
     });
-    saveState();
-    renderImpostazioni();
-    populateFilialeSelect();
+    saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
   document.getElementById('btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
   document.getElementById('advClose').onclick = ()=> document.getElementById('advModal').classList.remove('show');
-  document.getElementById('advUnlock').onclick = ()=>{
-    if(document.getElementById('advPwd').value==='979851'){
-      document.getElementById('advGate').classList.add('hidden');
-      document.getElementById('advBody').classList.remove('hidden');
-      setTimeout(()=>{ document.getElementById('advClientId').focus(); }, 100);
-    }else{
-      alert('Password errata');
-    }
-  };
-  document.getElementById('advSave').onclick = ()=>{
-    cfg.CLIENT_ID  = document.getElementById('advClientId').value.trim();
-    cfg.API_KEY    = document.getElementById('advApiKey').value.trim();
-    cfg.GMAIL_QUERY= document.getElementById('advGmailQuery').value.trim();
-    cfg.TEMP_RX    = document.getElementById('advTempRx').value.trim();
-    cfg.LOGIN_HINT = document.getElementById('advLoginHint').value.trim();
-    cfg.SCOPES     = document.getElementById('advScopes').value.trim() || DEFAULTS.SCOPES;
-    saveState();
-    initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e)));
-    document.getElementById('advModal')?.classList.remove('show');
-  };
-  document.getElementById('advTest').onclick = async ()=>{
-    try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); }
-    catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
-  };
+  document.getElementById('advUnlock').onclick = ()=>{ if(document.getElementById('advPwd').value==='979851'){ document.getElementById('advGate').classList.add('hidden'); document.getElementById('advBody').classList.remove('hidden'); setTimeout(()=>{ document.getElementById('advClientId').focus(); }, 100);} else { alert('Password errata'); } };
+  document.getElementById('advSave').onclick = ()=>{ cfg.CLIENT_ID  = document.getElementById('advClientId').value.trim(); cfg.API_KEY = document.getElementById('advApiKey').value.trim(); cfg.GMAIL_QUERY= document.getElementById('advGmailQuery').value.trim(); cfg.TEMP_RX = document.getElementById('advTempRx').value.trim(); cfg.LOGIN_HINT = document.getElementById('advLoginHint').value.trim(); cfg.SCOPES = document.getElementById('advScopes').value.trim() || DEFAULTS.SCOPES; saveState(); initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e))); document.getElementById('advModal')?.classList.remove('show'); };
+  document.getElementById('advTest').onclick = async ()=>{ try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); } };
   document.getElementById('advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
 
   async function forceAccountChooser(){
     try{
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-        openAdvancedModal();
-        return;
-      }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
       if (!window.gapi?.client) { await initGapi(); }
       if (!window.tokenClient) { initGIS(); }
-      signOut();
-      await new Promise(r=>setTimeout(r,50));
-      await signIn();
-      await fetchAlarms();
-    }catch(e){
-      alert('Errore login: ' + (e?.message || e));
-    }
+      signOut(); await new Promise(r=>setTimeout(r,50)); await signIn(); await fetchAlarms();
+    }catch(e){ alert('Errore login: ' + (e?.message || e)); }
   }
   document.getElementById('btnSignIn').onclick = forceAccountChooser;
   document.getElementById('btnChangeAccount').onclick = forceAccountChooser;
