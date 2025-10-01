@@ -29,7 +29,7 @@
 
     /* LIVE verticale */
     .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
-    .stream-box{ width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
+    .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
     .stream-media{ width:100%; height:100%; object-fit:contain; background:#000 }
 
     /* Barra stato animata (globale) */
@@ -59,14 +59,15 @@
             <div class="text-[12px] text-slate-400 -mt-0.5">Celle frigo · live & storico</div>
           </div>
         </div>
-
         <nav class="flex items-center gap-4">
           <button data-route="#home" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Home</button>
           <button data-route="#storico" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Storico</button>
           <button data-route="#impostazioni" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Impostazioni</button>
         </nav>
-
         <div class="flex items-center gap-2">
+          <button id="btnAdvanced" class="px-2 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition" title="Impostazioni avanzate" aria-label="Impostazioni avanzate">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-width="1.5" d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 1 0 12 8.5z"/><path stroke-width="1.5" d="M19.4 15a7.8 7.8 0 0 0 .1-6l2-1.2-2-3.5-2.2 1a8 8 0 0 0-5.6-2l-.4-2.4H9.7L9.3 3a8 8 0 0 0-5.6 2l-2.2-1-2 3.5 2 1.2a7.8 7.8 0 0 0 0 6l-2 1.2 2 3.5 2.2-1a8 8 0 0 0 5.6 2l.4 2.4h3.2l.4-2.4a8 8 0 0 0 5.6-2l2.2 1 2-3.5-2-1.2z"/></svg>
+          </button>
           <button id="btnSignIn" class="px-3 py-2 rounded-lg brand-grad text-slate-900 font-medium shadow-md hover:opacity-90 transition">Accedi a Gmail</button>
           <button id="btnChangeAccount" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition">Cambia account</button>
         </div>
@@ -147,7 +148,7 @@
   </main>
 
   <!-- MODAL: Impostazioni avanzate -->
-  <div id="advModal" class="overlay">
+  <div id="advModal" class="overlay" style="z-index:100;">
     <div class="glass rounded-2xl p-6 w-[min(760px,92vw)]">
       <div class="flex items-center justify-between mb-4">
         <div class="text-lg font-medium">Impostazioni avanzate</div>
@@ -176,13 +177,18 @@
           </label>
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
-          <label class="block text-sm text-slate-300">Consiglia account (login hint)
+          <label class="block text-sm text-slate-300">Login hint (consiglia account)
             <input id="advLoginHint" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="es. resinellialimentari@gmail.com" />
           </label>
+          <label class="block text-sm text-slate-300">Scopes (opzionale)
+            <input id="advScopes" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://www.googleapis.com/auth/gmail.readonly" />
+          </label>
         </div>
-        <div class="text-xs text-slate-400">Origin da inserire nel Client OAuth per GitHub Pages: <code id="originsHint"></code></div>
-        <div class="flex justify-end gap-2">
-          <button id="advSave" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Salva</button>
+        <div class="text-xs text-slate-400">Origin da inserire nel Client OAuth (GitHub Pages): <code id="originsHint"></code></div>
+        <div class="flex flex-wrap gap-2 justify-end">
+          <button id="advTest"  class="px-3 py-2 rounded-lg bg-blue-500/90 hover:bg-blue-500 transition">Test accesso</button>
+          <button id="advSave"  class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Salva</button>
+          <button id="advReset" class="px-3 py-2 rounded-lg bg-red-700/80 hover:bg-red-600/80 transition">Reset LocalStorage</button>
         </div>
       </div>
     </div>
@@ -235,6 +241,10 @@ function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium',
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
 function buildTempRx(){ return new RegExp(cfg.TEMP_RX, 'i') }
 function originsString(){ const host = location.host; return `https://${host}` }
+function isInsecureOnHttps(u){
+  try{ const p = new URL(u, location.href); return location.protocol==='https:' && p.protocol==='http:'; }
+  catch{ return false; }
+}
 
 /**************** LIVE SIZER ****************/
 function uiBindLiveSizer() {
@@ -293,7 +303,6 @@ function runCheckFiliali() {
         const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
         const hasAlarm = rows.some(r => r.status === 'alto');
 
-        // estrai dettagli da mail GGM
         const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
         const RX_RANGE     = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
 
@@ -396,7 +405,12 @@ function go(route){
   if(route==='impostazioni') renderImpostazioni();
   history.replaceState(null, '', '#'+route);
 }
+window.addEventListener('hashchange', ()=>{
+  const r = (location.hash||'#home').slice(1);
+  if(routes.includes(r)) go(r);
+});
 
+/**************** STATUS BAR (globale) ****************/
 function checkFilialiStatus(){
   const bar = $('#statusBar'); const badges = $('#statusBadges');
   badges.innerHTML = '';
@@ -414,20 +428,50 @@ function checkFilialiStatus(){
   bar.classList.remove('hidden');
 }
 
-/**************** UI RENDERERS (Impostazioni & Storico) ****************/
+/**************** IMPOSTAZIONI & STORICO ****************/
 function populateFilialeSelect(){
   const sel = $('#filialeSelect');
   sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
 }
 
-function applyStreamForCurrent(){
-  const id = $('#filialeSelect').value; const f = state.filiali.find(x=>x.id===id);
-  const iframe = $('#phoneIframe'); const img = $('#phoneMjpeg'); const none = $('#noStream');
-  iframe.classList.add('hidden'); img.classList.add('hidden'); none.classList.add('hidden');
-  if(!f?.streamUrl){ none.classList.remove('hidden'); return }
-  const mode = f.streamMode || 'iframe';
-  if(mode==='iframe'){ iframe.src = f.streamUrl; iframe.classList.remove('hidden') }
-  else { img.src = f.streamUrl; img.classList.remove('hidden') }
+function renderImpostazioni(){
+  $('#usernameInput').value = state.username || '';
+  const list = $('#filialiList'); list.innerHTML = '';
+  (state.filiali||[]).forEach(f=>{
+    const card = el(`<div class="glass rounded-xl p-3">
+      <div class="grid md:grid-cols-4 gap-3 items-end">
+        <label class="block text-sm text-slate-300">Nome
+          <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
+        </label>
+        <label class="block text-sm text-slate-300">Email storico
+          <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
+        </label>
+        <label class="block text-sm text-slate-300">URL dispositivo (stream)
+          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://" />
+        </label>
+        <label class="block text-sm text-slate-300">Modalità
+          <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
+            <option ${f.streamMode==='iframe'?'selected':''} value="iframe">Iframe</option>
+            <option ${f.streamMode==='mjpeg'?'selected':''} value="mjpeg">MJPEG</option>
+          </select>
+        </label>
+      </div>
+      <div class="mt-3 flex justify-end gap-2">
+        <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
+        <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
+      </div>
+    </div>`);
+    card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
+      card.querySelectorAll('input,select').forEach(inp=>{ f[inp.dataset.k] = inp.value });
+      saveState(); populateFilialeSelect(); applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
+    });
+    card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
+      state.history[f.id] = [];
+      state.filiali = state.filiali.filter(x=>x.id!==f.id);
+      saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
+    });
+    list.appendChild(card);
+  });
 }
 
 function renderStorico(){
@@ -470,43 +514,35 @@ function renderStorico(){
   }
 }
 
-function renderImpostazioni(){
-  $('#usernameInput').value = state.username || '';
-  const list = $('#filialiList'); list.innerHTML = '';
-  (state.filiali || []).forEach(f=>{
-    const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-4 gap-3 items-end">
-        <label class="block text-sm text-slate-300">Nome
-          <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
-        </label>
-        <label class="block text-sm text-slate-300">Email storico
-          <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
-        </label>
-        <label class="block text-sm text-slate-300">URL dispositivo (stream)
-          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://" />
-        </label>
-        <label class="block text-sm text-slate-300">Modalità
-          <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
-            <option ${f.streamMode==='iframe'?'selected':''} value="iframe">Iframe</option>
-            <option ${f.streamMode==='mjpeg'?'selected':''} value="mjpeg">MJPEG</option>
-          </select>
-        </label>
-      </div>
-      <div class="mt-3 flex justify-end gap-2">
-        <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
-        <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
-      </div>
-    </div>`);
-    card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
-      card.querySelectorAll('input,select').forEach(inp=>{ f[inp.dataset.k] = inp.value });
-      saveState(); populateFilialeSelect(); applyStreamForCurrent(); runCheckFiliali(); uiRenderFilialiDesc();
-    });
-    card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
-      state.filiali = state.filiali.filter(x=>x.id!==f.id); delete state.history[f.id];
-      saveState(); renderImpostazioni(); populateFilialeSelect(); runCheckFiliali(); uiRenderFilialiDesc();
-    });
-    list.appendChild(card);
-  });
+/**************** STREAM ****************/
+function applyStreamForCurrent(){
+  const id = $('#filialeSelect').value; const f = state.filiali.find(x=>x.id===id);
+  const iframe = $('#phoneIframe'); const img = $('#phoneMjpeg'); const none = $('#noStream');
+  const liveBox = $('#liveStreamBox');
+
+  iframe.classList.add('hidden'); img.classList.add('hidden'); none.classList.remove('hidden');
+  none.innerHTML = 'Nessun URL stream configurato';
+  // rimuovi eventuale badge mixed content
+  liveBox.querySelector('.mixed-content-badge')?.remove();
+
+  if(!f?.streamUrl) return;
+  if (isInsecureOnHttps(f.streamUrl)) {
+    none.innerHTML = `
+      <div class="space-y-2 text-center">
+        <div class="text-slate-300 text-sm">Lo stream è <span class="font-semibold">HTTP</span> e non può essere caricato su una pagina <span class="font-semibold">HTTPS</span>.</div>
+        <div class="text-xs text-slate-400">Usa un URL <span class="font-semibold">HTTPS</span> (es. ngrok/Cloudflare Tunnel) oppure apri l’app in locale via HTTP.</div>
+        <a href="${f.streamUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri lo stream in nuova scheda (non sicuro)</a>
+      </div>`;
+    const badgeDiv = document.createElement('div');
+    badgeDiv.className = "mixed-content-badge absolute top-2 right-2 px-2 py-0.5 rounded bg-amber-500/80 text-amber-900 text-xs font-semibold shadow";
+    badgeDiv.textContent = "⚠ Mixed content";
+    liveBox.appendChild(badgeDiv);
+    return;
+  }
+  const mode = f.streamMode || 'iframe';
+  none.classList.add('hidden');
+  if(mode==='iframe'){ iframe.src = f.streamUrl; iframe.classList.remove('hidden'); }
+  else { img.src = f.streamUrl; img.classList.remove('hidden'); }
 }
 
 /**************** AUTH (gapi + GIS) ****************/
@@ -550,9 +586,9 @@ function initGIS(){
 }
 function signOut(){
   try{
-    const tok = gapi.client.getToken?.();
-    if (tok?.access_token) google.accounts.oauth2.revoke(tok.access_token, ()=>{});
-    gapi.client.setToken(null);
+    const tok = gapi?.client?.getToken?.();
+    if (tok?.access_token) google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{});
+    gapi?.client?.setToken?.(null);
   }catch{}
   gmailReady = false;
 }
@@ -614,7 +650,7 @@ async function fetchAlarms(){
     const mr = (body||'').match(RX_RANGE);
     const min = mr ? parseFloat(mr[1].replace(',','.')) : NaN;
     const max = mr ? parseFloat(mr[2].replace(',','.')) : NaN;
-    const mtemp = (body||'').match(new RegExp(cfg.TEMP_RX,'i'));
+    const mtemp = (body||'').match(buildTempRx());
     const temp = mtemp ? parseFloat(mtemp[1].replace(',','.')) : NaN;
 
     const low = (subject + '\n' + body).toLowerCase();
@@ -652,23 +688,27 @@ function openAdvancedModal() {
   modal.classList.add('show');
   gate.classList.remove('hidden');
   body.classList.add('hidden');
+  // Origin
   const host = location.host;
   const o = document.getElementById('originsHint');
   if (o) o.textContent = `https://${host}`;
-  const f = (id,v)=>{ const el=document.getElementById(id); if(el) el.value=(v||''); };
-  f('advClientId', cfg?.CLIENT_ID);
-  f('advApiKey',   cfg?.API_KEY);
-  f('advGmailQuery', cfg?.GMAIL_QUERY);
-  f('advTempRx',     cfg?.TEMP_RX);
-  f('advLoginHint',  cfg?.LOGIN_HINT||'');
+  // Precompila i campi con cfg attuale
+  document.getElementById('advClientId').value = cfg?.CLIENT_ID || '';
+  document.getElementById('advApiKey').value = cfg?.API_KEY || '';
+  document.getElementById('advGmailQuery').value = cfg?.GMAIL_QUERY || '';
+  document.getElementById('advTempRx').value = cfg?.TEMP_RX || '';
+  document.getElementById('advLoginHint').value = cfg?.LOGIN_HINT || '';
+  document.getElementById('advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '';
+  setTimeout(()=>{ document.getElementById('advPwd').focus(); }, 100);
 }
 
 /**************** BOOT ****************/
 window.addEventListener('DOMContentLoaded', async ()=>{
+  // carica stato
   loadState();
   populateFilialeSelect();
 
-  // Router
+  // router (click tab)
   document.querySelectorAll('.route-btn').forEach(b=>{
     b.addEventListener('click', ()=> go(b.dataset.route.slice(1)));
   });
@@ -676,14 +716,14 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   setActiveTab(initial);
   go((initial||'#home').slice(1));
 
-  // Filiale change
+  // cambio filiale
   $('#filialeSelect').addEventListener('change', ()=> applyStreamForCurrent());
 
-  // Init selezione
+  // init selezione live
   if (state.filiali[0]) $('#filialeSelect').value = state.filiali[0].id;
   applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
 
-  // Impostazioni
+  // impostazioni base
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
   $('#btnAddFiliale').addEventListener('click', ()=>{
     state.filiali.push({
@@ -698,24 +738,36 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     populateFilialeSelect();
   });
 
-  // Advanced modal
-  document.getElementById('advClose').onclick  = ()=> document.getElementById('advModal').classList.remove('show');
-  document.getElementById('advUnlock').onclick = ()=>{ if($('#advPwd').value==='979851'){ $('#advGate').classList.add('hidden'); $('#advBody').classList.remove('hidden') } else { alert('Password errata') } };
-  document.getElementById('advSave').onclick   = ()=>{
-    cfg.CLIENT_ID = document.getElementById('advClientId').value.trim();
-    cfg.API_KEY   = document.getElementById('advApiKey').value.trim();
-    cfg.GMAIL_QUERY = document.getElementById('advGmailQuery').value.trim();
-    cfg.TEMP_RX     = document.getElementById('advTempRx').value.trim();
-    cfg.LOGIN_HINT  = document.getElementById('advLoginHint').value.trim();
+  // advanced modal
+  document.getElementById('btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
+  document.getElementById('advClose').onclick = ()=> document.getElementById('advModal').classList.remove('show');
+  document.getElementById('advUnlock').onclick = ()=>{
+    if(document.getElementById('advPwd').value==='979851'){
+      document.getElementById('advGate').classList.add('hidden');
+      document.getElementById('advBody').classList.remove('hidden');
+      setTimeout(()=>{ document.getElementById('advClientId').focus(); }, 100);
+    }else{
+      alert('Password errata');
+    }
+  };
+  document.getElementById('advSave').onclick = ()=>{
+    cfg.CLIENT_ID  = document.getElementById('advClientId').value.trim();
+    cfg.API_KEY    = document.getElementById('advApiKey').value.trim();
+    cfg.GMAIL_QUERY= document.getElementById('advGmailQuery').value.trim();
+    cfg.TEMP_RX    = document.getElementById('advTempRx').value.trim();
+    cfg.LOGIN_HINT = document.getElementById('advLoginHint').value.trim();
+    cfg.SCOPES     = document.getElementById('advScopes').value.trim() || DEFAULTS.SCOPES;
     saveState();
     initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e)));
     document.getElementById('advModal')?.classList.remove('show');
   };
+  document.getElementById('advTest').onclick = async ()=>{
+    try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); }
+    catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
+  };
+  document.getElementById('advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
 
-  // Apri modal avanzate
-  document.getElementById('btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
-
-  // Auth flow neutro (sempre account chooser)
+  // auth flow neutro
   async function forceAccountChooser(){
     try{
       if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
