@@ -511,11 +511,12 @@ function renderImpostazioni(){
       $('#filialeSelect').value = f.id; startWhepForCurrent(); go('home');
     });
 
-    card.querySelector('[data-act="join"]').addEventListener('click', ()=>{
-      // Se il tuo Worker espone /join che redirige a screenstream con campi compilati
-      const base = (f.streamUrl||'').replace(/\/whep\/?$/,'');
-      const url = `${base}/join?sid=${encodeURIComponent(f.streamUser||'')}&pwd=${encodeURIComponent(f.streamPass||'')}`;
-      window.open(url, '_blank', 'noopener');
+    card.querySelector('[data-act="join"]').addEventListener('click', async ()=>{
+      const sid = (f.streamUser || '72500366').trim();
+      const pwd = (f.streamPass || 'Yachc6').trim();
+      try { await navigator.clipboard.writeText(`${sid}\t${pwd}`); } catch {}
+      window.open('https://screenstream.io/', '_blank', 'noopener');
+      alert('ID e Password copiati: incollali nei campi su screenstream.io');
     });
 
     list.appendChild(card);
