@@ -331,14 +331,24 @@ function showError(msg){ $('#errorBox').textContent = msg || ""; }
 function cleanupWebRTC(){ try{ if(webrtcSession?.pc){ webrtcSession.pc.getTransceivers?.().forEach(t=>t.stop?.()); webrtcSession.pc.getSenders?.().forEach(s=>s.track?.stop?.()); webrtcSession.pc.getReceivers?.().forEach(r=>r.track?.stop?.()); webrtcSession.pc.close?.(); } }catch{} webrtcSession=null; }
 async function stopWhepResource(){ if(webrtcSession?.resourceUrl){ try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{} } }
 
-function buildVdoViewUrl(id, pwd, label){
+function buildVdoViewUrl(id, pwd, label, rawUrl){
+  // Se è stato incollato un URL VDO completo, usalo direttamente
+  if (rawUrl && /vdo\.ninja/.test(rawUrl)) {
+    const u = new URL(rawUrl);
+    u.searchParams.set('cleanoutput','1');
+    u.searchParams.set('autostart','1');
+    u.searchParams.set('embed','1');
+    if (label) u.searchParams.set('label', label);
+    return u.toString();
+  }
+  // Altrimenti costruisci dal solo ID/Password
   const p = new URLSearchParams();
-  if (id)  p.set('view', id);
-  if (pwd) p.set('password', pwd);   // VDO.Ninja accetta "password"
-  p.set('cleanoutput','1');          // UI minimale
-  p.set('autostart','1');            // auto-play se possibile
-  p.set('label', label || 'Live');   // etichetta
+  if (id)  p.set('view', id);        // alias "v"
+  if (pwd) { p.set('password', pwd); p.set('p', pwd); } // compat col formato dell'app
+  p.set('cleanoutput','1');
+  p.set('autostart','1');
   p.set('embed','1');
+  if (label) p.set('label', label);
   return `https://vdo.ninja/?${p.toString()}`;
 }
 function buildVdoPushUrl(id, pwd){
@@ -373,7 +383,7 @@ async function startLiveForCurrent(){
   updateLiveToolbar();
 
   if (f.provider === 'vdo'){
-    const url = buildVdoViewUrl(f.streamUser, f.streamPass, f.name);
+    const url = buildVdoViewUrl(f.streamUser, f.streamPass, f.name, f.streamUrl);
     frame.src = url;
     frame.classList.remove('hidden');
     none.classList.add('hidden');
