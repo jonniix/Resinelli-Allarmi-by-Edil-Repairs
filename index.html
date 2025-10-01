@@ -11,12 +11,14 @@
   <!-- Google API Client (Gmail REST) -->
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <style>
-    :root{ --bg1:#0b1220; --bg2:#0e1b34; --acc:#60a5fa; --acc2:#22d3ee; --live-h:75svh }
+    :root{ --bg1:#0b1220; --bg2:#0f1a2c; --acc:#93c5fd; --acc2:#22d3ee; --live-h:75svh }
     html,body{ height:100% }
-    body{ background:
-      radial-gradient(1200px 600px at 20% -10%, rgba(96,165,250,.20), transparent),
-      radial-gradient(1000px 600px at 100% 10%, rgba(34,211,238,.15), transparent),
-      linear-gradient(180deg, var(--bg1), var(--bg2));
+    body{
+      background:
+        radial-gradient(1000px 520px at 15% -10%, rgba(147,197,253,.15), transparent),
+        radial-gradient(900px 520px at 100% 0%, rgba(34,211,238,.12), transparent),
+        linear-gradient(180deg, var(--bg1), var(--bg2));
+      color: #e5e7eb;
     }
     .glass{ background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
             backdrop-filter: blur(10px); border:1px solid rgba(255,255,255,.08) }
@@ -30,118 +32,119 @@
     .stream-box{ width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
     .stream-media{ width:100%; height:100%; object-fit:contain; background:#000 }
 
-    /* Modal overlay */
-    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50 }
-    .overlay.show{ display:flex }
-
     /* Barra stato animata (globale) */
     .scanbar{ position:relative; overflow:hidden }
     .scanbar::after{ content:""; position:absolute; inset:0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); transform:translateX(-100%); animation: scan 2.2s infinite }
     @keyframes scan{ 0%{transform:translateX(-100%)} 60%{transform:translateX(100%)} 100%{transform:translateX(100%)} }
 
-    /* Popup dettagli riga storico */
-    #rowModal { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
-    #rowModal.show { display:flex; }
+    /* Modal overlay */
+    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50 }
+    .overlay.show{ display:flex }
     #rowModalBody { background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0; }
+
+    /* Tabs */
+    .tab-btn{ border-bottom:2px solid transparent; }
+    .tab-btn.active{ color:#fff; border-color: var(--acc2); }
   </style>
 </head>
-<body class="text-slate-100">
-  <div class="min-h-full grid lg:grid-cols-[300px,1fr] gap-0">
-    <!-- Sidebar -->
-    <aside class="glass p-6 lg:sticky lg:top-0 lg:h-screen">
-      <div class="mb-8">
-        <div class="text-2xl font-semibold tracking-wide">Resinelli Monitor</div>
-        <div class="text-xs text-slate-400">Celle frigo · live & storico</div>
-      </div>
-      <nav class="space-y-1" id="nav">
-        <button data-route="#home" class="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition route-btn">Home</button>
-        <button data-route="#storico" class="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition route-btn">Storico</button>
-        <button data-route="#impostazioni" class="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition route-btn">Impostazioni</button>
-        <button id="btnAdvanced" class="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition">Impostazioni avanzate</button>
-      </nav>
-      <div class="mt-8 grid gap-2">
-        <button id="btnSignIn" class="px-3 py-2 rounded-lg brand-grad text-slate-900 font-medium shadow-md hover:opacity-90 transition">Accedi a Gmail</button>
-        <button id="btnChangeAccount" class="mt-2 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition w-full">Cambia account</button>
-      </div>
-      <div class="mt-6 text-[11px] text-slate-400">
-        <p>Login via Google Identity Services. Nessun dato lascia il tuo browser (LocalStorage).</p>
-      </div>
-    </aside>
-
-    <!-- Main -->
-    <main class="p-6 lg:p-10 space-y-8">
-      <!-- Header -->
-      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
-          <div class="text-3xl font-semibold" id="pageTitle">Home</div>
-          <div class="text-sm text-slate-400">Monitor live e ultimi allarmi per filiale</div>
-        </div>
+<body>
+  <!-- TOP BAR -->
+  <header class="glass sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div class="flex items-center gap-3">
-          <label class="text-sm text-slate-400">Filiale</label>
-          <select id="filialeSelect" class="bg-slate-900 border border-white/10 rounded-lg px-3 py-2"></select>
+          <div class="h-9 w-9 rounded-lg brand-grad"></div>
+          <div>
+            <div class="text-lg font-semibold tracking-wide">Resinelli Monitor</div>
+            <div class="text-[12px] text-slate-400 -mt-0.5">Celle frigo · live & storico</div>
+          </div>
+        </div>
+
+        <nav class="flex items-center gap-4">
+          <button data-route="#home" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Home</button>
+          <button data-route="#storico" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Storico</button>
+          <button data-route="#impostazioni" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Impostazioni</button>
+        </nav>
+
+        <div class="flex items-center gap-2">
+          <button id="btnSignIn" class="px-3 py-2 rounded-lg brand-grad text-slate-900 font-medium shadow-md hover:opacity-90 transition">Accedi a Gmail</button>
+          <button id="btnChangeAccount" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition">Cambia account</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- PAGE -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+    <!-- Header sezione -->
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div>
+        <div class="text-3xl font-semibold" id="pageTitle">Home</div>
+        <div class="text-sm text-slate-400">Monitor live e ultimi allarmi per filiale</div>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-slate-400">Filiale</label>
+        <select id="filialeSelect" class="bg-slate-900 border border-white/10 rounded-lg px-3 py-2"></select>
+      </div>
+    </div>
+
+    <!-- Barra stato globale -->
+    <div id="statusBar" class="glass scanbar rounded-xl p-3 hidden">
+      <div class="flex flex-wrap items-center gap-2 text-sm" id="statusBadges"></div>
+    </div>
+
+    <!-- ROUTES -->
+    <section id="route-home" class="space-y-6">
+      <div class="grid md:grid-cols-[minmax(360px,760px),1fr] gap-6">
+        <!-- LIVE -->
+        <div class="stream-outer">
+          <div class="mb-2">
+            <label class="block text-xs text-slate-400 mb-1">Dimensione schermo LIVE</label>
+            <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
+          </div>
+          <div class="stream-box" id="liveStreamBox">
+            <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessun URL stream configurato</div>
+            <iframe id="phoneIframe" class="hidden stream-media" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-forms allow-pointer-lock"></iframe>
+            <img id="phoneMjpeg" class="hidden stream-media" alt="Anteprima MJPEG" />
+          </div>
+        </div>
+
+        <!-- Check + descrizioni -->
+        <div class="flex flex-col gap-6">
+          <div id="checkFilialiPanel" class="glass rounded-2xl p-5 space-y-3">
+            <div class="font-medium tracking-wide mb-2">Check filiali</div>
+            <div id="checkFilialiRows" class="space-y-2"></div>
+          </div>
+          <div id="filialiDescWrap" class="space-y-2"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="route-storico" class="hidden space-y-6">
+      <div id="storicoWrap" class="space-y-6"></div>
+    </section>
+
+    <section id="route-impostazioni" class="hidden space-y-6">
+      <div class="glass rounded-2xl p-5">
+        <div class="font-medium mb-3">Profilo</div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm text-slate-300">Nome utente
+            <input id="usernameInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="Es. Mario" />
+          </label>
         </div>
       </div>
 
-      <!-- Barra stato globale (facoltativa) -->
-      <div id="statusBar" class="glass scanbar rounded-xl p-3 hidden">
-        <div class="flex flex-wrap items-center gap-2 text-sm" id="statusBadges"></div>
+      <div class="glass rounded-2xl p-5">
+        <div class="flex items-center justify-between">
+          <div class="font-medium">Filiali</div>
+          <button id="btnAddFiliale" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Aggiungi filiale</button>
+        </div>
+        <div id="filialiList" class="mt-4 space-y-3"></div>
       </div>
 
-      <!-- ROUTES -->
-      <section id="route-home" class="space-y-6">
-        <!-- Live + pannello destro -->
-        <div class="grid md:grid-cols-[minmax(440px,760px),1fr] gap-6">
-          <!-- LIVE verticale -->
-          <div class="stream-outer">
-            <div class="mb-2">
-              <label class="block text-xs text-slate-400 mb-1">Dimensione schermo LIVE</label>
-              <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
-            </div>
-            <div class="stream-box" id="liveStreamBox">
-              <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessun URL stream configurato</div>
-              <iframe id="phoneIframe" class="hidden stream-media" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-forms allow-pointer-lock"></iframe>
-              <img id="phoneMjpeg" class="hidden stream-media" alt="Anteprima MJPEG" />
-            </div>
-          </div>
-          <!-- Destra: Check + descrizioni -->
-          <div class="flex flex-col gap-6">
-            <!-- Check filiali -->
-            <div id="checkFilialiPanel" class="glass rounded-2xl p-5 space-y-3">
-              <div class="font-medium tracking-wide mb-2">Check filiali</div>
-              <div id="checkFilialiRows" class="space-y-2"></div>
-            </div>
-            <!-- Descrizioni per filiale -->
-            <div id="filialiDescWrap" class="space-y-2"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="route-storico" class="hidden space-y-6">
-        <div id="storicoWrap" class="space-y-6"></div>
-      </section>
-
-      <section id="route-impostazioni" class="hidden space-y-6">
-        <div class="glass rounded-2xl p-5">
-          <div class="font-medium mb-3">Profilo</div>
-          <div class="grid sm:grid-cols-2 gap-4">
-            <label class="block text-sm text-slate-300">Nome utente
-              <input id="usernameInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="Es. Mario" />
-            </label>
-          </div>
-        </div>
-
-        <div class="glass rounded-2xl p-5">
-          <div class="flex items-center justify-between">
-            <div class="font-medium">Filiali</div>
-            <button id="btnAddFiliale" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Aggiungi filiale</button>
-          </div>
-          <div id="filialiList" class="mt-4 space-y-3"></div>
-        </div>
-
-        <div class="text-xs text-slate-500">Le impostazioni sono salvate nel tuo browser (LocalStorage). Possiamo aggiungere salvataggio su Google Drive per sincronizzarle tra dispositivi.</div>
-      </section>
-    </main>
-  </div>
+      <div class="text-xs text-slate-500">Le impostazioni sono salvate nel tuo browser (LocalStorage).</div>
+    </section>
+  </main>
 
   <!-- MODAL: Impostazioni avanzate -->
   <div id="advModal" class="overlay">
@@ -177,7 +180,7 @@
             <input id="advLoginHint" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="es. resinellialimentari@gmail.com" />
           </label>
         </div>
-        <div class="text-xs text-slate-400">Origin da inserire nel Client OAuth quando pubblichi: <code id="originsHint"></code></div>
+        <div class="text-xs text-slate-400">Origin da inserire nel Client OAuth per GitHub Pages: <code id="originsHint"></code></div>
         <div class="flex justify-end gap-2">
           <button id="advSave" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Salva</button>
         </div>
@@ -186,7 +189,7 @@
   </div>
 
   <!-- Modal row details -->
-  <div id="rowModal">
+  <div id="rowModal" class="overlay">
     <div id="rowModalBody"></div>
   </div>
 
@@ -202,25 +205,28 @@ const DEFAULTS = {
 };
 
 /**************** STATO + STORAGE ****************/
-const DEFAULT_FILIALI = [
-  { id: crypto.randomUUID(), name: 'Resinelli Castione', email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
-  { id: crypto.randomUUID(), name: "Resinelli Sant'Antonino", email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
-  { id: crypto.randomUUID(), name: 'Resinelli Losone', email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
-];
-
 let cfg = {};
-let state = { username: '', filiali: [], history: {} };
 let tokenClient; // GIS
 let gmailReady = false;
+
+// DEFAULT FILIALI
+const DEFAULT_FILIALI = [
+  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
+  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
+  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
+];
+let state = { username: '', filiali: [], history: {} };
 
 function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
-  state.filiali = s.filiali && s.filiali.length? s.filiali : DEFAULT_FILIALI;
-  state.history = s.history || {};
+  state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+  state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
 }
-function saveState(){ localStorage.setItem('resinelli_monitor', JSON.stringify({ ...state, cfg })) }
+function saveState(){
+  localStorage.setItem('resinelli_monitor', JSON.stringify({ ...state, cfg }));
+}
 
 /**************** HELPERS ****************/
 const $ = (sel)=> document.querySelector(sel);
@@ -230,26 +236,12 @@ function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
 function buildTempRx(){ return new RegExp(cfg.TEMP_RX, 'i') }
 function originsString(){ const host = location.host; return `https://${host}` }
 
-/* Parser dedicato email GGMGastro (facoltativo ma utile) */
-const GGM_TEMP_RE  = /temperatura.*?è di\s*(-?\d+(?:[.,]\d+)?)/i;
-const GGM_RANGE_RE = /da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
-const GGM_SUBJ_RE  = /Allarme temperatura:\s*([^(]+)\(([^)]+)\)/i;
-function parseGgmGastro(subject, body){
-  const out = { name:null, branch:null, temp:NaN, min:NaN, max:NaN };
-  const sm = subject.match(GGM_SUBJ_RE);
-  if (sm){ out.name = sm[1].trim(); out.branch = sm[2].trim(); }
-  const tm = body.match(GGM_TEMP_RE);
-  if (tm) out.temp = toNumber(tm[1]);
-  const rm = body.match(GGM_RANGE_RE);
-  if (rm){ out.min = toNumber(rm[1]); out.max = toNumber(rm[2]); }
-  return out;
-}
-
 /**************** LIVE SIZER ****************/
 function uiBindLiveSizer() {
   const input = $('#liveSize');
   const box = $('#liveStreamBox');
-  let val = localStorage.getItem('live_h') || input.value || '78';
+  if (!input || !box) return;
+  let val = localStorage.getItem('live_h') || input.value || '75';
   input.value = val;
   box.style.setProperty('--live-h', val + 'svh');
   input.addEventListener('input', () => {
@@ -260,9 +252,6 @@ function uiBindLiveSizer() {
 }
 
 /**************** CHECK FILIALI UX ****************/
-const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
-const RX_RANGE = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
-
 function runCheckFiliali() {
   const rowsWrap = document.getElementById('checkFilialiRows');
   rowsWrap.innerHTML = '';
@@ -282,20 +271,17 @@ function runCheckFiliali() {
     bar.className = 'relative flex-1 h-2 rounded-full bg-white/10 overflow-hidden';
     const fill = document.createElement('div');
     fill.className = 'h-full w-0 rounded-full bg-emerald-500/70 transition-[width] duration-300';
-    fill.setAttribute('data-fill','');
     bar.appendChild(fill);
     top.appendChild(bar);
 
     const status = document.createElement('div');
     status.className = 'text-xs text-slate-400';
-    status.setAttribute('data-status','');
     status.setAttribute('aria-live','polite');
 
     row.appendChild(top);
     row.appendChild(status);
     rowsWrap.appendChild(row);
 
-    // animazione ~1.2s
     let start = null;
     function step(ts){
       if(!start) start = ts;
@@ -307,7 +293,7 @@ function runCheckFiliali() {
         const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
         const hasAlarm = rows.some(r => r.status === 'alto');
 
-        // Parser GGMGastro
+        // estrai dettagli da mail GGM
         const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
         const RX_RANGE     = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
 
@@ -393,11 +379,18 @@ function uiOpenRowDetails(row, filialeName) {
   modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
 }
 
-/**************** ROUTER & STATUS GLOBALE ****************/
+/**************** ROUTER ****************/
 const routes = ['home','storico','impostazioni'];
+function setActiveTab(hash){
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    const r=b.getAttribute('data-route');
+    b.classList.toggle('active', r===hash);
+  });
+}
 function go(route){
   routes.forEach(r=> document.getElementById('route-'+r).classList.toggle('hidden', r!==route));
   $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
+  setActiveTab('#'+route);
   if(route==='storico') renderStorico();
   if(route==='home'){ checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer(); }
   if(route==='impostazioni') renderImpostazioni();
@@ -421,8 +414,11 @@ function checkFilialiStatus(){
   bar.classList.remove('hidden');
 }
 
-/**************** UI RENDERERS ****************/
-function populateFilialeSelect(){ $('#filialeSelect').innerHTML = state.filiali.map(f=>`<option value="${f.id}">${f.name}</option>`).join('') }
+/**************** UI RENDERERS (Impostazioni & Storico) ****************/
+function populateFilialeSelect(){
+  const sel = $('#filialeSelect');
+  sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+}
 
 function applyStreamForCurrent(){
   const id = $('#filialeSelect').value; const f = state.filiali.find(x=>x.id===id);
@@ -474,7 +470,46 @@ function renderStorico(){
   }
 }
 
-/* ============ AUTH HELPERS (gapi + GIS) ============ */
+function renderImpostazioni(){
+  $('#usernameInput').value = state.username || '';
+  const list = $('#filialiList'); list.innerHTML = '';
+  (state.filiali || []).forEach(f=>{
+    const card = el(`<div class="glass rounded-xl p-3">
+      <div class="grid md:grid-cols-4 gap-3 items-end">
+        <label class="block text-sm text-slate-300">Nome
+          <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
+        </label>
+        <label class="block text-sm text-slate-300">Email storico
+          <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
+        </label>
+        <label class="block text-sm text-slate-300">URL dispositivo (stream)
+          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://" />
+        </label>
+        <label class="block text-sm text-slate-300">Modalità
+          <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
+            <option ${f.streamMode==='iframe'?'selected':''} value="iframe">Iframe</option>
+            <option ${f.streamMode==='mjpeg'?'selected':''} value="mjpeg">MJPEG</option>
+          </select>
+        </label>
+      </div>
+      <div class="mt-3 flex justify-end gap-2">
+        <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
+        <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
+      </div>
+    </div>`);
+    card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
+      card.querySelectorAll('input,select').forEach(inp=>{ f[inp.dataset.k] = inp.value });
+      saveState(); populateFilialeSelect(); applyStreamForCurrent(); runCheckFiliali(); uiRenderFilialiDesc();
+    });
+    card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
+      state.filiali = state.filiali.filter(x=>x.id!==f.id); delete state.history[f.id];
+      saveState(); renderImpostazioni(); populateFilialeSelect(); runCheckFiliali(); uiRenderFilialiDesc();
+    });
+    list.appendChild(card);
+  });
+}
+
+/**************** AUTH (gapi + GIS) ****************/
 async function waitForGapiLoad(maxMs = 10000){
   const t0 = Date.now();
   while (!window.gapi?.load) {
@@ -482,24 +517,20 @@ async function waitForGapiLoad(maxMs = 10000){
     await new Promise(r => setTimeout(r, 50));
   }
 }
-
 async function initGapi(){
   await waitForGapiLoad();
   return new Promise((resolve, reject)=>{
     gapi.load('client', async ()=>{
       try{
         const opts = { discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"] };
-        if (window.cfg?.API_KEY) opts.apiKey = window.cfg.API_KEY; // opzionale
+        if (window.cfg?.API_KEY) opts.apiKey = window.cfg.API_KEY;
         await gapi.client.init(opts);
         resolve();
       }catch(e){ reject(e) }
     });
   });
 }
-
-/* === VERSIONI SICURE richieste === */
 function initGIS(){
-  // Blocca se manca il Client ID
   if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
     alert('Devi impostare il Google OAuth CLIENT_ID (tipo: xxxxx.apps.googleusercontent.com).');
     openAdvancedModal();
@@ -517,12 +548,18 @@ function initGIS(){
     }
   });
 }
-
+function signOut(){
+  try{
+    const tok = gapi.client.getToken?.();
+    if (tok?.access_token) google.accounts.oauth2.revoke(tok.access_token, ()=>{});
+    gapi.client.setToken(null);
+  }catch{}
+  gmailReady = false;
+}
 function signIn(){
   return new Promise( async (resolve, reject)=>{
     try{
       if (!window.gapi?.client) { await initGapi(); }
-      // se manca CLIENT_ID, apri subito il modal e interrompi
       if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
         alert('Inserisci prima il CLIENT_ID in Impostazioni avanzate.');
         openAdvancedModal();
@@ -530,7 +567,7 @@ function signIn(){
       }
       if (!window.tokenClient) { initGIS(); }
 
-      // popup neutro: niente auto-login, niente login_hint
+      // popup neutro (niente auto-login)
       try{ window.google?.accounts?.id?.disableAutoSelect?.(); }catch{}
       try{
         const tok = window.gapi?.client?.getToken?.();
@@ -546,9 +583,8 @@ function signIn(){
     }catch(e){ reject(e); }
   });
 }
-/* ============ /AUTH HELPERS ============ */
 
-/**************** GMAIL (GIS + gapi.client) ****************/
+/**************** GMAIL ****************/
 async function listMessages(q, max=200){ let msgs=[], pageToken; do{ const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken}); const d=res.result; if(d.messages) msgs.push(...d.messages); pageToken=d.nextPageToken } while(pageToken && msgs.length<max); return msgs }
 async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result }
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
@@ -575,7 +611,6 @@ async function fetchAlarms(){
     const RX_RANGE     = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
 
     const ms = subject.match(RX_SUBJ_CELL);
-    const cella = ms ? ms[1].trim() : '';
     const mr = (body||'').match(RX_RANGE);
     const min = mr ? parseFloat(mr[1].replace(',','.')) : NaN;
     const max = mr ? parseFloat(mr[2].replace(',','.')) : NaN;
@@ -598,15 +633,13 @@ async function fetchAlarms(){
       return $('#filialeSelect').value || state.filiali[0]?.id;
     })();
 
-    const row = { date:+d, temp, min, max, cella, status:'alto', subject, id:m.id, bodyPlain: body };
-
+    const row = { date:+d, temp, min, max, status:'alto', subject, id:m.id, bodyPlain: body };
     if(!state.history[fid]) state.history[fid]=[];
     if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
   }
   for(const fid of Object.keys(state.history)){ state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000) }
   saveState();
-  runCheckFiliali();
-  uiRenderFilialiDesc?.();
+  checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
   if(location.hash==='#storico') renderStorico();
 }
 
@@ -622,7 +655,6 @@ function openAdvancedModal() {
   const host = location.host;
   const o = document.getElementById('originsHint');
   if (o) o.textContent = `https://${host}`;
-  // precompila i campi con cfg attuale
   const f = (id,v)=>{ const el=document.getElementById(id); if(el) el.value=(v||''); };
   f('advClientId', cfg?.CLIENT_ID);
   f('advApiKey',   cfg?.API_KEY);
@@ -633,57 +665,59 @@ function openAdvancedModal() {
 
 /**************** BOOT ****************/
 window.addEventListener('DOMContentLoaded', async ()=>{
-  loadState(); populateFilialeSelect();
+  loadState();
+  populateFilialeSelect();
 
-  // Google: disabilita auto-select account
-  if (window.google?.accounts?.id?.disableAutoSelect) {
-    google.accounts.id.disableAutoSelect();
-  }
+  // Router
+  document.querySelectorAll('.route-btn').forEach(b=>{
+    b.addEventListener('click', ()=> go(b.dataset.route.slice(1)));
+  });
+  const initial = (location.hash || '#home');
+  setActiveTab(initial);
+  go((initial||'#home').slice(1));
 
-  // routing
-  document.querySelectorAll('.route-btn').forEach(b=> b.addEventListener('click', ()=> go(b.dataset.route.slice(1))));
-  go((location.hash||'#home').slice(1));
+  // Filiale change
+  $('#filialeSelect').addEventListener('change', ()=> applyStreamForCurrent());
 
-  // filiale change → applica stream
-  $('#filialeSelect').addEventListener('change', ()=>{ applyStreamForCurrent() });
-
-  // init selezione
-  $('#filialeSelect').value = state.filiali[0]?.id || '';
+  // Init selezione
+  if (state.filiali[0]) $('#filialeSelect').value = state.filiali[0].id;
   applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
 
-  // impostazioni
+  // Impostazioni
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
-  $('#btnAddFiliale').addEventListener('click', ()=>{ state.filiali.push({ id: crypto.randomUUID(), name:'Nuova filiale', email:'allarmi@edilrepairs.ch', streamUrl:'', streamMode:'iframe' }); saveState(); renderImpostazioni(); populateFilialeSelect() });
+  $('#btnAddFiliale').addEventListener('click', ()=>{
+    state.filiali.push({
+      id: (crypto?.randomUUID?.() || ('f'+Date.now())),
+      name: 'Nuova filiale',
+      email: 'allarmi@edilrepairs.ch',
+      streamUrl: '',
+      streamMode: 'iframe'
+    });
+    saveState();
+    renderImpostazioni();
+    populateFilialeSelect();
+  });
 
   // Advanced modal
-  $('#btnAdvanced').addEventListener('click', ()=> openAdvancedModal());
-  $('#advClose').addEventListener('click', ()=> $('#advModal').classList.remove('show'));
-  $('#advUnlock').addEventListener('click', ()=>{ if($('#advPwd').value==='979851'){ $('#advGate').classList.add('hidden'); $('#advBody').classList.remove('hidden') } else { alert('Password errata') } });
-
-  // Salva avanzate (versione richiesta)
-  document.getElementById('advSave').addEventListener('click', ()=>{
+  document.getElementById('advClose').onclick  = ()=> document.getElementById('advModal').classList.remove('show');
+  document.getElementById('advUnlock').onclick = ()=>{ if($('#advPwd').value==='979851'){ $('#advGate').classList.add('hidden'); $('#advBody').classList.remove('hidden') } else { alert('Password errata') } };
+  document.getElementById('advSave').onclick   = ()=>{
     cfg.CLIENT_ID = document.getElementById('advClientId').value.trim();
     cfg.API_KEY   = document.getElementById('advApiKey').value.trim();
     cfg.GMAIL_QUERY = document.getElementById('advGmailQuery').value.trim();
     cfg.TEMP_RX     = document.getElementById('advTempRx').value.trim();
     cfg.LOGIN_HINT  = document.getElementById('advLoginHint').value.trim();
     saveState();
+    initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e)));
+    document.getElementById('advModal')?.classList.remove('show');
+  };
 
-    // Re-init sicuro
-    initGapi().then(()=>{
-      try{ initGIS(); }catch{}
-      alert('Impostazioni salvate. Ora puoi Accedere a Gmail.');
-      // chiudi modal se Client ID valido
-      if (cfg.CLIENT_ID && cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-        document.getElementById('advModal')?.classList.remove('show');
-      }
-    }).catch(e=> alert('Errore init: ' + (e?.message || e)));
-  });
+  // Apri modal avanzate
+  document.getElementById('btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
 
-  // Auth: flow protetto + listener richiesti
+  // Auth flow neutro (sempre account chooser)
   async function forceAccountChooser(){
     try{
-      // Se manca il Client ID → porta l’utente al modal e fermati
       if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
         openAdvancedModal();
         return;
@@ -692,19 +726,14 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       if (!window.tokenClient) { initGIS(); }
       signOut();
       await new Promise(r=>setTimeout(r,50));
-      await signIn();          // apre sempre il popup neutro
-      await fetchAlarms?.();   // ricarica storico
-      runCheckFiliali?.();     // aggiorna check
-      uiRenderFilialiDesc?.(); // aggiorna descrizioni
+      await signIn();
+      await fetchAlarms();
     }catch(e){
       alert('Errore login: ' + (e?.message || e));
     }
   }
   document.getElementById('btnSignIn').onclick = forceAccountChooser;
   document.getElementById('btnChangeAccount').onclick = forceAccountChooser;
-
-  // Live sizer
-  uiBindLiveSizer();
 });
 </script>
 </body>
