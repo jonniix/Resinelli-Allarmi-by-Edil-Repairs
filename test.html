@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>WHEP test</title>
+<video id="v" playsinline autoplay muted controls
+       style="width:100%;max-width:420px;background:#000"></video>
+<script>
+async function playWHEP(endpoint) {
+  const pc = new RTCPeerConnection();
+  const v  = document.getElementById('v');
+  pc.addEventListener('track', e => v.srcObject = e.streams[0]);
+  pc.addTransceiver('video', { direction: 'recvonly' });
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/sdp' },
+    body: offer.sdp
+  });
+  if (!res.ok) throw new Error('Handshake WHEP fallito: '+res.status+' '+await res.text());
+  const answer = await res.text();
+  await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+}
+
+playWHEP('https://edilrepairstechnology.resinellialimentari.workers.dev/whep'); 
+// Se serve: .../whep/<ID>
+</script>

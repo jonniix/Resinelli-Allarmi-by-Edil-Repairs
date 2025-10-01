@@ -1,0 +1,14 @@
+name = "resinelli-whep-proxy"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# Se usi WHEP_BASE + STREAM_ID:
+WHEP_BASE = "https://screenstream.io/whep"
+STREAM_ID = "INSERISCI_ID"    # es. 72500366
+
+# In alternativa usa WHEP_URL completo e ometti WHEP_BASE:
+# WHEP_URL = "https://screenstream.io/whep/72500366"
+
+# STREAM_PASS: meglio come secret
+# wrangler secret put STREAM_PASS

@@ -23,30 +23,22 @@
     .glass{ background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
             backdrop-filter: blur(10px); border:1px solid rgba(255,255,255,.08) }
     .brand-grad{ background: linear-gradient(90deg, var(--acc), var(--acc2)); }
-    .pulse-red{ position:relative }
-    .pulse-red::after{ content:""; position:absolute; inset:-6px; border:2px solid rgba(239,68,68,.6); border-radius:9999px; animation:pulse 1.5s infinite }
-    @keyframes pulse{0%{transform:scale(.6);opacity:.8}70%{transform:scale(1.4);opacity:0}100%{opacity:0}}
 
-    /* LIVE verticale */
     .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
     .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
     .stream-media{ width:100%; height:100%; object-fit:contain; background:#000 }
 
-    /* Barra stato animata (globale) */
     .scanbar{ position:relative; overflow:hidden }
     .scanbar::after{ content:""; position:absolute; inset:0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); transform:translateX(-100%); animation: scan 2.2s infinite }
     @keyframes scan{ 0%{transform:translateX(-100%)} 60%{transform:translateX(100%)} 100%{transform:translateX(100%)} }
 
-    /* Modal overlay */
     .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50 }
     .overlay.show{ display:flex }
     #rowModalBody { background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0; }
 
-    /* Tabs */
     .tab-btn{ border-bottom:2px solid transparent; }
     .tab-btn.active{ color:#fff; border-color: var(--acc2); }
 
-    /* Helper badge */
     .badge{ display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.2rem .5rem; border-radius:.5rem; border:1px solid transparent }
   </style>
 </head>
@@ -110,6 +102,7 @@
             <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessun URL stream configurato</div>
             <iframe id="phoneIframe" class="hidden stream-media" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-forms allow-pointer-lock"></iframe>
             <img id="phoneMjpeg" class="hidden stream-media" alt="Anteprima MJPEG" />
+            <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
           </div>
         </div>
 
@@ -218,11 +211,11 @@ let cfg = {};
 let tokenClient; // GIS
 let gmailReady = false;
 
-// DEFAULT FILIALI (ora con user/pass stream)
+// DEFAULT FILIALI (campi WebRTC inclusi)
 const DEFAULT_FILIALI = [
-  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'iframe' },
-  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'iframe' },
-  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'iframe' },
+  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
+  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
+  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
 ];
 let state = { username: '', filiali: [], history: {} };
 
@@ -230,11 +223,11 @@ function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
   state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
-  // ✅ assicura che le nuove chiavi esistano
   state.filiali.forEach(f=>{
     if(typeof f.streamUser!=='string') f.streamUser='';
     if(typeof f.streamPass!=='string') f.streamPass='';
-    if(!f.streamMode) f.streamMode='iframe';
+    if(!f.streamMode) f.streamMode='webrtc';
+    if(typeof f.streamAudio!=='boolean') f.streamAudio=false;
   });
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
@@ -249,28 +242,11 @@ function el(html){ const t=document.createElement('template'); t.innerHTML=html.
 function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) }
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
 function originsString(){ const host = location.host; return `https://${host}` }
-function isInsecureOnHttps(u){
-  try{ const p = new URL(u, location.href); return location.protocol==='https:' && p.protocol==='http:'; }
-  catch{ return false; }
-}
-function normalizeText(s){ 
-  return (s||'')
-    .replace(/[–—−]/g,'-')   // trattini Unicode → "-"
-    .replace(/\s+/g,' ')     // spazi multipli → uno
-    .trim(); 
-}
-
-/** Costruisce l’URL con Basic Auth se user/pass sono presenti */
+function isInsecureOnHttps(u){ try{ const p = new URL(u, location.href); return location.protocol==='https:' && p.protocol==='http:'; } catch{ return false; } }
+function normalizeText(s){ return (s||'').replace(/[–—−]/g,'-').replace(/\s+/g,' ').trim(); }
 function buildStreamUrlWithCreds(base, user, pass){
   if(!base) return '';
-  try{
-    const u = new URL(base, location.href);
-    if(user) u.username = user;   // il browser encoderà in automatico
-    if(pass) u.password = pass;
-    return u.toString();
-  }catch{
-    return base; // fallback
-  }
+  try{ const u=new URL(base, location.href); if(user) u.username=user; if(pass) u.password=pass; return u.toString(); }catch{ return base; }
 }
 
 /**************** LIVE SIZER ****************/
@@ -293,31 +269,14 @@ function runCheckFiliali() {
   const rowsWrap = document.getElementById('checkFilialiRows');
   rowsWrap.innerHTML = '';
   (state.filiali || []).forEach(filiale => {
-    const row = document.createElement('div');
-    row.className = 'flex flex-col gap-1';
-
-    const top = document.createElement('div');
-    top.className = 'flex items-center gap-3';
-
-    const name = document.createElement('span');
-    name.className = 'w-56 text-sm text-slate-300 truncate';
-    name.textContent = filiale.name;
-    top.appendChild(name);
-
-    const bar = document.createElement('div');
-    bar.className = 'relative flex-1 h-2 rounded-full bg-white/10 overflow-hidden';
-    const fill = document.createElement('div');
-    fill.className = 'h-full w-0 rounded-full bg-emerald-500/70 transition-[width] duration-300';
-    bar.appendChild(fill);
-    top.appendChild(bar);
-
-    const status = document.createElement('div');
-    status.className = 'text-xs text-slate-400';
-    status.setAttribute('aria-live','polite');
-
-    row.appendChild(top);
-    row.appendChild(status);
-    rowsWrap.appendChild(row);
+    const row = document.createElement('div'); row.className = 'flex flex-col gap-1';
+    const top = document.createElement('div'); top.className = 'flex items-center gap-3';
+    const name = document.createElement('span'); name.className = 'w-56 text-sm text-slate-300 truncate'; name.textContent = filiale.name; top.appendChild(name);
+    const bar = document.createElement('div'); bar.className = 'relative flex-1 h-2 rounded-full bg-white/10 overflow-hidden';
+    const fill = document.createElement('div'); fill.className = 'h-full w-0 rounded-full bg-emerald-500/70 transition-[width] duration-300';
+    bar.appendChild(fill); top.appendChild(bar);
+    const status = document.createElement('div'); status.className = 'text-xs text-slate-400'; status.setAttribute('aria-live','polite');
+    row.appendChild(top); row.appendChild(status); rowsWrap.appendChild(row);
 
     let start = null;
     function step(ts){
@@ -341,7 +300,7 @@ function runCheckFiliali() {
           let min = isFinite(last.min) ? last.min : NaN;
           let max = isFinite(last.max) ? last.max : NaN;
 
-        if(!isFinite(min) || !isFinite(max)){
+          if(!isFinite(min) || !isFinite(max)){
             const mr = (last.bodyPlain || last.body || '').match(RX_RANGE);
             if (mr){ min = parseFloat(mr[1].replace(',','.')); max = parseFloat(mr[2].replace(',','.')); }
           }
@@ -466,33 +425,37 @@ function renderImpostazioni(){
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-6 gap-3 items-end">
+      <div class="grid md:grid-cols-7 gap-3 items-end">
         <label class="block text-sm text-slate-300">Nome
           <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
         </label>
         <label class="block text-sm text-slate-300">Email storico
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
-        <label class="block text-sm text-slate-300">URL dispositivo (HTTPS)
-          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://..." />
+        <label class="block text-sm text-slate-300">URL stream (WHEP/HTTPS)
+          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://<tuo-worker>.workers.dev/whep" />
         </label>
         <label class="block text-sm text-slate-300">ID stream
-          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="username" />
+          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="(opzionale: non serve con Worker)" />
         </label>
-        <label class="block text-sm text-slate-300">Password stream
-          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="••••••••" />
+        <label class="block text-sm text-slate-300">Password
+          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="(opzionale: non serve con Worker)" />
         </label>
         <label class="block text-sm text-slate-300">Modalità
           <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
+            <option ${f.streamMode==='webrtc'?'selected':''} value="webrtc">WebRTC (WHEP)</option>
             <option ${f.streamMode==='iframe'?'selected':''} value="iframe">Iframe</option>
             <option ${f.streamMode==='mjpeg'?'selected':''} value="mjpeg">MJPEG</option>
           </select>
         </label>
+        <label class="flex items-center gap-2 text-sm text-slate-300 mt-7">
+          <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
+          Audio (WebRTC)
+        </label>
       </div>
       <div class="mt-3 flex flex-wrap justify-between gap-2">
         <div class="text-[11px] text-slate-400">
-          Suggerimento: con HTTPS + Basic Auth alcuni browser possono bloccare l’embed.<br/>
-          In tal caso usa il link “Apri in nuova scheda”.
+          WebRTC richiede HTTPS e CORS; usa il tuo Worker come endpoint. <br/>Se l’embed non appare, prova “Apri stream”.
         </div>
         <div class="flex gap-2">
           <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri stream</button>
@@ -502,9 +465,11 @@ function renderImpostazioni(){
       </div>
     </div>`);
 
-    // azioni
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
-      card.querySelectorAll('input,select').forEach(inp=>{ f[inp.dataset.k] = inp.value });
+      card.querySelectorAll('input,select').forEach(inp=>{
+        if (inp.type==='checkbox') f[inp.dataset.k] = inp.checked;
+        else f[inp.dataset.k] = inp.value;
+      });
       saveState(); populateFilialeSelect(); applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
     });
     card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
@@ -561,67 +526,174 @@ function renderStorico(){
   }
 }
 
-/**************** STREAM ****************/
+/**************** ====== STREAM (WebRTC WHEP + fallback) ====== ****************/
+let webrtcSession = null; // {pc, resourceUrl, videoEl, authHeaders}
+
+function cleanupWebRTC(){
+  try{
+    if(webrtcSession?.pc){
+      webrtcSession.pc.getTransceivers?.().forEach(t=>t.stop?.());
+      webrtcSession.pc.getSenders?.().forEach(s=>s.track?.stop?.());
+      webrtcSession.pc.getReceivers?.().forEach(r=>r.track?.stop?.());
+      webrtcSession.pc.close?.();
+    }
+  }catch{}
+  webrtcSession = null;
+}
+
+async function stopWhepResource(){
+  if(webrtcSession?.resourceUrl){
+    try{
+      await fetch(webrtcSession.resourceUrl, {
+        method:'DELETE',
+        mode:'cors',
+        headers: webrtcSession.authHeaders || {}
+      });
+    }catch{}
+  }
+}
+
+function extractCredsFromUrl(u){
+  try{
+    const url = new URL(u, location.href);
+    const user = url.username || '';
+    const pass = url.password || '';
+    url.username = ''; url.password = '';
+    return { user, pass, sanitized: url.toString() };
+  }catch{
+    return { user:'', pass:'', sanitized:u || '' };
+  }
+}
+
+function makeBasicAuthHeaders(user, pass){
+  if(!user && !pass) return {};
+  const token = btoa(`${user||''}:${pass||''}`);
+  return { 'Authorization': `Basic ${token}` };
+}
+
+async function startWhep(finalUrl, withAudio, extraHeaders = {}){
+  const video = $('#webrtcVideo');
+  video.classList.remove('hidden');
+  video.muted = !withAudio;
+  video.playsInline = true;
+
+  const pc = new RTCPeerConnection({ iceServers: [{urls:'stun:stun.l.google.com:19302'}] });
+
+  const onError = (msg) => {
+    const none = $('#noStream');
+    none.classList.remove('hidden');
+    none.innerHTML = `
+      <div class="space-y-2 text-center">
+        <div class="text-slate-300 text-sm">${msg}</div>
+        <a href="${finalUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova scheda</a>
+      </div>`;
+    video.classList.add('hidden');
+    cleanupWebRTC();
+  };
+
+  pc.addTransceiver('video', {direction:'recvonly'});
+  if(withAudio) pc.addTransceiver('audio', {direction:'recvonly'});
+
+  pc.ontrack = (ev) => {
+    const [stream] = ev.streams;
+    if (stream) {
+      video.srcObject = stream;
+      video.play().catch(()=>{ /* su iOS l'utente premerà play */ });
+    }
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  let res;
+  try{
+    res = await fetch(finalUrl, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/sdp', ...extraHeaders },
+      body: offer.sdp,
+      mode: 'cors',
+    });
+  }catch(e){
+    onError('Connessione WHEP non raggiungibile (CORS/HTTPS).');
+    throw e;
+  }
+  if(!res.ok){
+    onError('Il server WHEP ha rifiutato la richiesta ('+res.status+').');
+    return;
+  }
+
+  const answerSdp = await res.text();
+  const resourceUrl = res.headers.get('Location'); // riscritto dal Worker
+  await pc.setRemoteDescription({type:'answer', sdp:answerSdp});
+
+  webrtcSession = { pc, resourceUrl, videoEl: video, authHeaders: extraHeaders };
+}
+
 function applyStreamForCurrent(){
   const id = $('#filialeSelect').value; const f = state.filiali.find(x=>x.id===id);
-  const iframe = $('#phoneIframe'); const img = $('#phoneMjpeg'); const none = $('#noStream');
-  const liveBox = $('#liveStreamBox');
+  const iframe = $('#phoneIframe'); const img = $('#phoneMjpeg'); const none = $('#noStream'); const video = $('#webrtcVideo'); const liveBox = $('#liveStreamBox');
 
-  iframe.classList.add('hidden'); img.classList.add('hidden'); none.classList.remove('hidden');
+  stopWhepResource().finally(cleanupWebRTC);
+
+  iframe.classList.add('hidden'); img.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden');
   none.innerHTML = 'Nessun URL stream configurato';
   liveBox.querySelector('.mixed-content-badge')?.remove();
   liveBox.querySelector('.auth-badge')?.remove();
 
   if(!f?.streamUrl) return;
 
-  // Applica user/pass se presenti
-  const finalUrl = buildStreamUrlWithCreds(f.streamUrl, f.streamUser, f.streamPass);
+  const parsed = extractCredsFromUrl(f.streamUrl);
+  const user = (f.streamUser || parsed.user || '').trim();
+  const pass = (f.streamPass || parsed.pass || '').trim();
+  const bareUrl = parsed.sanitized;
 
-  // Mixed content check
-  if (isInsecureOnHttps(finalUrl)) {
-    none.innerHTML = `
-      <div class="space-y-2 text-center">
-        <div class="text-slate-300 text-sm">Lo stream è <span class="font-semibold">HTTP</span> e non può essere caricato su una pagina <span class="font-semibold">HTTPS</span>.</div>
-        <div class="text-xs text-slate-400">Usa un URL <span class="font-semibold">HTTPS</span> (es. ngrok/Cloudflare Tunnel) oppure apri l’app in locale via HTTP.</div>
-        <a href="${finalUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri lo stream in nuova scheda (non sicuro)</a>
-      </div>`;
-    const badgeDiv = document.createElement('div');
-    badgeDiv.className = "mixed-content-badge absolute top-2 right-2 px-2 py-0.5 rounded bg-amber-500/80 text-amber-900 text-xs font-semibold shadow";
-    badgeDiv.textContent = "⚠ Mixed content";
-    liveBox.appendChild(badgeDiv);
+  const mode = f.streamMode || 'webrtc';
+  none.classList.add('hidden');
+
+  if(mode==='webrtc'){
+    // Se usi il Worker, non serve Authorization (è gestita lato server)
+    let authHeaders = {};
+    try {
+      const host = new URL(bareUrl).host;
+      if (!/\.workers\.dev$/i.test(host)) {
+        // solo se NON è il worker (caso avanzato)
+        authHeaders = makeBasicAuthHeaders(user, pass);
+      }
+    } catch {}
+
+    if ((user||pass) && Object.keys(authHeaders).length){
+      const b = document.createElement('div');
+      b.className = "auth-badge absolute top-2 left-2 badge bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
+      b.textContent = "🔒 HTTPS + Auth";
+      liveBox.appendChild(b);
+    }
+    if (isInsecureOnHttps(bareUrl)) {
+      none.classList.remove('hidden');
+      none.innerHTML = `<div class="space-y-2 text-center"><div class="text-slate-300 text-sm">Lo stream è HTTP e non può essere caricato su HTTPS.</div></div>`;
+      return;
+    }
+    startWhep(bareUrl, !!f.streamAudio, authHeaders).catch(()=>{});
     return;
   }
 
-  // Badge se si usa Basic Auth
-  if ((f.streamUser||'') || (f.streamPass||'')){
-    const b = document.createElement('div');
-    b.className = "auth-badge absolute top-2 left-2 badge bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
-    b.textContent = "🔒 HTTPS + Auth";
-    liveBox.appendChild(b);
-  }
+  // Fallback (iframe / mjpeg)
+  const urlForEmbed = buildStreamUrlWithCreds(bareUrl, user, pass);
 
-  const mode = f.streamMode || 'iframe';
-  none.classList.add('hidden');
-
-  // Nota: alcune camere impostano X-Frame-Options/Content-Security-Policy che blocca l’embed.
-  // In tal caso, l’iframe resterà vuoto: offriamo un link di fallback.
-  let fallbackTimer;
   if(mode==='iframe'){
-    iframe.src = finalUrl;
+    iframe.src = urlForEmbed;
     iframe.classList.remove('hidden');
-    clearTimeout(fallbackTimer);
-    fallbackTimer = setTimeout(()=>{
-      if(iframe.contentWindow === null){ // non conclusivo, ma mostra il link dopo un po'
+    setTimeout(()=>{
+      if(iframe.contentWindow === null){
         none.classList.remove('hidden');
         none.innerHTML = `
           <div class="space-y-2 text-center">
-            <div class="text-slate-300 text-sm">Se lo stream non appare, potrebbe essere bloccato dall’host (X-Frame-Options/Frame-Ancestors).</div>
-            <a href="${finalUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova scheda</a>
+            <div class="text-slate-300 text-sm">Lo stream potrebbe essere bloccato dall’host (X-Frame-Options/Frame-Ancestors).</div>
+            <a href="${urlForEmbed}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova scheda</a>
           </div>`;
       }
     }, 2000);
-  } else {
-    img.src = finalUrl;
+  } else { // mjpeg
+    img.src = urlForEmbed;
     img.classList.remove('hidden');
   }
 }
@@ -684,7 +756,6 @@ function signIn(){
       }
       if (!window.tokenClient) { initGIS(); }
 
-      // popup neutro (niente auto-login)
       try{ window.google?.accounts?.id?.disableAutoSelect?.(); }catch{}
       try{
         const tok = window.gapi?.client?.getToken?.();
@@ -707,24 +778,27 @@ async function getMessage(id){ const res=await gapi.client.gmail.users.messages.
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
 function getHeader(msg, name){ const h = msg.payload.headers.find(h=>h.name.toLowerCase()===name.toLowerCase()); return h? h.value: '' }
 
-/* Estrae 20.1 da "temperatura ... è di 20.1 gradi" ed il range "da -8.0 a 12.0" */
 function parseTemperatures(subject, body){
   const s = normalizeText(subject);
   const b = normalizeText(body);
 
-  // 1) temperatura attuale (prioritaria)
   const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i)
               || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
 
-  // 2) range minimo/massimo
   const mRange = b.match(/Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i);
 
   let temp = mTemp ? toNumber(mTemp[1]) : NaN;
   const min = mRange ? toNumber(mRange[1]) : NaN;
   const max = mRange ? toNumber(mRange[2]) : NaN;
 
-  // 3) Fallback: primo numero fuori dal blocco "da ... a ..."
+  // Fallback più prudente: evita di prendere numeri da elenchi (- 58.0, ecc.)
   if(!isFinite(temp)){
+    // cerca numeri vicino a "°C" o "gradi"
+    const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i);
+    if (near) temp = toNumber(near[1]);
+  }
+  if(!isFinite(temp)){
+    // altrimenti primo numero FUORI dal range "da..a" (se presente)
     const all = [...b.matchAll(/-?\d+(?:[.,]\d+)?/g)].map(m=>({v:toNumber(m[0]), i:m.index}));
     if (mRange) {
       const rs = mRange.index, re = rs + mRange[0].length;
@@ -754,7 +828,6 @@ async function fetchAlarms(){
       }
     })(msg.payload);
 
-    // Estrazione temperature e range
     const { temp, min, max } = parseTemperatures(subject, body);
 
     const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
@@ -764,7 +837,6 @@ async function fetchAlarms(){
     const isAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(low);
     if(!isAlarm) continue;
 
-    // mappa filiale
     const sito = ms ? ms[2].trim() : '';
     const fid = (function(){
       if(sito){
@@ -795,11 +867,9 @@ function openAdvancedModal() {
   modal.classList.add('show');
   gate.classList.remove('hidden');
   body.classList.add('hidden');
-  // Origin
   const host = location.host;
   const o = document.getElementById('originsHint');
   if (o) o.textContent = `https://${host}`;
-  // Precompila i campi con cfg attuale
   document.getElementById('advClientId').value = cfg?.CLIENT_ID || '';
   document.getElementById('advApiKey').value = cfg?.API_KEY || '';
   document.getElementById('advGmailQuery').value = cfg?.GMAIL_QUERY || '';
@@ -811,11 +881,9 @@ function openAdvancedModal() {
 
 /**************** BOOT ****************/
 window.addEventListener('DOMContentLoaded', async ()=>{
-  // carica stato
   loadState();
   populateFilialeSelect();
 
-  // router (click tab)
   document.querySelectorAll('.route-btn').forEach(b=>{
     b.addEventListener('click', ()=> go(b.dataset.route.slice(1)));
   });
@@ -823,14 +891,11 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   setActiveTab(initial);
   go((initial||'#home').slice(1));
 
-  // cambio filiale
   $('#filialeSelect').addEventListener('change', ()=> applyStreamForCurrent());
 
-  // init selezione live
   if (state.filiali[0]) $('#filialeSelect').value = state.filiali[0].id;
   applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
 
-  // impostazioni base
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
   $('#btnAddFiliale').addEventListener('click', ()=>{
     state.filiali.push({
@@ -840,14 +905,14 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       streamUrl: '',
       streamUser: '',
       streamPass: '',
-      streamMode: 'iframe'
+      streamMode: 'webrtc',
+      streamAudio: false
     });
     saveState();
     renderImpostazioni();
     populateFilialeSelect();
   });
 
-  // advanced modal
   document.getElementById('btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
   document.getElementById('advClose').onclick = ()=> document.getElementById('advModal').classList.remove('show');
   document.getElementById('advUnlock').onclick = ()=>{
@@ -876,7 +941,6 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   };
   document.getElementById('advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
 
-  // auth flow neutro
   async function forceAccountChooser(){
     try{
       if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
@@ -895,6 +959,9 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   }
   document.getElementById('btnSignIn').onclick = forceAccountChooser;
   document.getElementById('btnChangeAccount').onclick = forceAccountChooser;
+
+  // cleanup WebRTC su unload
+  window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); });
 });
 </script>
 </body>
