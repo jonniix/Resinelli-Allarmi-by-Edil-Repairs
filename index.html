@@ -278,6 +278,13 @@ function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
   state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+  state.filiali.forEach(f=>{
+    if(!f.streamUrl) f.streamUrl = WORKER_WHEP;
+    if(typeof f.streamUser!=='string') f.streamUser='';
+    if(typeof f.streamPass!=='string') f.streamPass='';
+    f.streamMode = 'webrtc'; // forza WebRTC
+    if(typeof f.streamAudio!=='boolean') f.streamAudio=false;
+  });
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
 }
@@ -517,42 +524,64 @@ function renderImpostazioni(){
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-6 gap-3 items-end">
+      <div class="grid md:grid-cols-7 gap-3 items-end">
         <label class="block text-sm text-slate-300">Nome
           <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
         </label>
         <label class="block text-sm text-slate-300">Email storico
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
-        <label class="block text-sm text-slate-300">ID stream (forzato)
-          <input class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${SCREENSTREAM_ID}" disabled />
+        <label class="block text-sm text-slate-300">URL stream (WHEP/HTTPS)
+          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://<tuo-worker>.workers.dev/whep" />
         </label>
-        <label class="block text-sm text-slate-300">Password stream
-          <input type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${SCREENSTREAM_PASS}" disabled />
+        <label class="block text-sm text-slate-300">ID stream
+          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="(opzionale: non serve con Worker)" />
         </label>
-        <div class="text-sm text-slate-300">
-          Modalità
-          <div class="mt-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10">WebRTC (WHEP) — screenstream.io</div>
-        </div>
-        <div class="flex items-end">
-          <button data-act="open" class="w-full px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Apri sito</button>
-        </div>
+        <label class="block text-sm text-slate-300">Password
+          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="(opzionale: non serve con Worker)" />
+        </label>
+        <label class="block text-sm text-slate-300" style="display:none">Modalità
+          <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" disabled>
+            <option selected value="webrtc">WebRTC (WHEP)</option>
+            <option value="iframe">Iframe</option>
+            <option value="mjpeg">MJPEG</option>
+          </select>
+        </label>
+        <label class="flex items-center gap-2 text-sm text-slate-300 mt-7">
+          <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
+          Audio (WebRTC)
+        </label>
       </div>
       <div class="mt-3 flex flex-wrap justify-between gap-2">
         <div class="text-[11px] text-slate-400">
-          L’endpoint è <code>https://screenstream.io/whep/${SCREENSTREAM_ID}</code>. L’embed è tramite WebRTC con Basic Auth.
+          WebRTC richiede HTTPS e CORS; usa il tuo Worker come endpoint. <br/>Se l’embed non appare, prova “Apri stream”.
         </div>
         <div class="flex gap-2">
-          <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
-          <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
+          <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri stream</button>
+          <!-- Bottone aggiuntivo: Apri su ScreenStream -->
         </div>
       </div>
     </div>`);
 
+    // Bottone "Apri su ScreenStream"
+    const workerBase = (WORKER_WHEP || '').replace(/\/whep\/?$/, '');
+    const joinBtn = document.createElement('button');
+    joinBtn.className = 'px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500';
+    joinBtn.textContent = 'Apri su ScreenStream';
+    joinBtn.addEventListener('click', ()=>{
+      const sid = encodeURIComponent(f.streamUser || '');
+      const pwd = encodeURIComponent(f.streamPass || '');
+      const url = `${workerBase}/join?sid=${sid}&pwd=${pwd}`;
+      window.open(url, '_blank', 'noopener');
+    });
+    card.querySelector('div.flex.gap-2').prepend(joinBtn);
+
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
-      card.querySelectorAll('input[data-k]').forEach(inp=>{ f[inp.dataset.k] = inp.value; });
-      saveState(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
-      alert('Impostazioni salvate.');
+      card.querySelectorAll('input[data-k]').forEach(inp=>{
+        if (inp.type==='checkbox') f[inp.dataset.k] = inp.checked;
+        else f[inp.dataset.k] = inp.value;
+      });
+      saveState(); populateFilialeSelect(); applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
     });
     card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
       state.history[f.id] = [];
@@ -560,7 +589,8 @@ function renderImpostazioni(){
       saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
     });
     card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
-      window.open('https://screenstream.io/', '_blank', 'noopener');
+      const url = buildStreamUrlWithCreds(f.streamUrl, f.streamUser, f.streamPass);
+      if(url) window.open(url, '_blank', 'noopener');
     });
 
     list.appendChild(card);
