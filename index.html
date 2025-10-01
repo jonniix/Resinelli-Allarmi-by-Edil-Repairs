@@ -4,12 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Resinelli Monitor</title>
-  <!-- Tailwind (CDN) - in produzione usa build CLI/PostCSS -->
+  <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Identity Services (OAuth modern) -->
+  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Google API Client (Gmail REST) -->
+  <!-- Google API Client (Gmail) -->
   <script src="https://apis.google.com/js/api.js" async defer></script>
+
   <style>
     :root{ --bg1:#0b1220; --bg2:#0f1a2c; --acc:#93c5fd; --acc2:#22d3ee; --live-h:75svh }
     html,body{ height:100% }
@@ -18,37 +19,23 @@
         radial-gradient(1000px 520px at 15% -10%, rgba(147,197,253,.15), transparent),
         radial-gradient(900px 520px at 100% 0%, rgba(34,211,238,.12), transparent),
         linear-gradient(180deg, var(--bg1), var(--bg2));
-      color: #e5e7eb;
+      color:#e5e7eb;
     }
-    .glass{ background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
-            backdrop-filter: blur(10px); border:1px solid rgba(255,255,255,.08) }
-    .brand-grad{ background: linear-gradient(90deg, var(--acc), var(--acc2)); }
-
-    /* LIVE layout */
+    .glass{ background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+            backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.08) }
+    .brand-grad{ background:linear-gradient(90deg,var(--acc),var(--acc2)); }
     .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
     .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
     .stream-media{ width:100%; height:100%; object-fit:contain; background:#000 }
-
     .scanbar{ position:relative; overflow:hidden }
-    .scanbar::after{ content:""; position:absolute; inset:0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); transform:translateX(-100%); animation: scan 2.2s infinite }
+    .scanbar::after{ content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent); transform:translateX(-100%); animation:scan 2.2s infinite }
     @keyframes scan{ 0%{transform:translateX(-100%)} 60%{transform:translateX(100%)} 100%{transform:translateX(100%)} }
-
     .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50 }
     .overlay.show{ display:flex }
-    #rowModalBody { background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0; }
-
-    .tab-btn{ border-bottom:2px solid transparent; }
-    .tab-btn.active{ color:#fff; border-color: var(--acc2); }
-
+    #rowModalBody{ background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0 }
+    .tab-btn{ border-bottom:2px solid transparent }
+    .tab-btn.active{ color:#fff; border-color:var(--acc2) }
     .badge{ display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.2rem .5rem; border-radius:.5rem; border:1px solid transparent }
-
-    /* === Viewer LAN in-box (popup nel riquadro live) === */
-    #lanOverlay { position:absolute; inset:0; display:none; background:rgba(0,0,0,.85); z-index:30; }
-    #lanOverlay.show{ display:block; }
-    #lanToolbar { position:absolute; left:0; right:0; top:0; height:40px; display:flex; align-items:center; justify-content:space-between; padding:.25rem .5rem; background:rgba(2,6,23,.85); border-bottom:1px solid rgba(255,255,255,.08) }
-    #lanFrame { position:absolute; inset:40px 0 0 0; width:100%; height:calc(100% - 40px); border:0; background:#000; }
-    #lanBlocked { position:absolute; inset:40px 0 0 0; display:none; align-items:center; justify-content:center; text-align:center; padding:1rem; }
-    #lanBlocked.show{ display:flex; }
   </style>
 </head>
 <body>
@@ -69,11 +56,11 @@
           <button data-route="#impostazioni" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Impostazioni</button>
         </nav>
         <div class="flex items-center gap-2">
-          <button id="btnAdvanced" class="px-2 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition" title="Impostazioni avanzate" aria-label="Impostazioni avanzate">
+          <button id="btnAdvanced" class="px-2 py-2 rounded-lg bg-slate-800 hover:bg-slate-700" title="Impostazioni avanzate" aria-label="Impostazioni avanzate">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-width="1.5" d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 1 0 12 8.5z"/><path stroke-width="1.5" d="M19.4 15a7.8 7.8 0 0 0 .1-6l2-1.2-2-3.5-2.2 1a8 8 0 0 0-5.6-2l-.4-2.4H9.7L9.3 3a8 8 0 0 0-5.6 2l-2.2-1-2 3.5 2 1.2a7.8 7.8 0 0 0 0 6l-2 1.2 2 3.5 2.2-1a8 8 0 0 0 5.6 2l.4 2.4h3.2l.4-2.4a8 8 0 0 0 5.6-2l2.2 1 2-3.5-2-1.2z"/></svg>
           </button>
-          <button id="btnSignIn" class="px-3 py-2 rounded-lg brand-grad text-slate-900 font-medium shadow-md hover:opacity-90 transition">Accedi a Gmail</button>
-          <button id="btnChangeAccount" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition">Cambia account</button>
+          <button id="btnSignIn" class="px-3 py-2 rounded-lg brand-grad text-slate-900 font-medium shadow-md hover:opacity-90">Accedi a Gmail</button>
+          <button id="btnChangeAccount" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Cambia account</button>
         </div>
       </div>
     </div>
@@ -81,7 +68,6 @@
 
   <!-- PAGE -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
-    <!-- Header sezione -->
     <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
       <div>
         <div class="text-3xl font-semibold" id="pageTitle">Home</div>
@@ -109,44 +95,17 @@
               <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
             </div>
             <button id="btnReconnect" class="mt-6 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Riconnetti</button>
-            <a href="https://screenstream.io/" target="_blank" rel="noopener" class="mt-6 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600">Apri screenstream.io</a>
+            <button id="btnOpenSS" class="mt-6 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600">Apri screenstream.io</button>
           </div>
           <div class="stream-box" id="liveStreamBox">
             <div id="statusBox" class="absolute left-0 right-0 top-0 p-2 text-center text-xs text-slate-300"></div>
             <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessuna live avviata</div>
             <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
-
-            <!-- === Viewer LAN (resta disponibile se mai ti dovesse servire) === -->
-            <div id="lanOverlay">
-              <div id="lanToolbar">
-                <div class="text-xs text-slate-300 truncate">
-                  <span class="opacity-60">Viewer LAN:</span>
-                  <span id="lanUrlLabel" class="font-mono"></span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <button id="lanReplace" class="px-2 py-1 rounded bg-amber-500/90 text-slate-900 text-xs">Apri qui (sostituisce scheda)</button>
-                  <button id="lanExternal" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri in nuova finestra</button>
-                  <button id="lanClose" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Chiudi</button>
-                </div>
-              </div>
-              <iframe id="lanFrame"></iframe>
-              <div id="lanBlocked" class="text-sm text-slate-300">
-                <div>
-                  <div class="mb-2">Contenuto HTTP bloccato in pagina HTTPS (Mixed Content).</div>
-                  <div class="text-xs text-slate-400 mb-3">Non è possibile visualizzare la pagina della camera <em>dentro</em> questo riquadro quando l’app è su HTTPS.</div>
-                  <div class="flex items-center justify-center gap-2">
-                    <button id="lanOpenExternal2" class="px-3 py-1.5 rounded bg-emerald-600/90 hover:bg-emerald-600 text-xs">Apri in nuova finestra</button>
-                    <button id="lanReplace2" class="px-3 py-1.5 rounded bg-amber-500/90 text-slate-900 text-xs">Apri qui (sostituisce scheda)</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- === /Viewer LAN === -->
           </div>
           <div id="errorBox" class="text-xs text-rose-300 min-h-5"></div>
         </div>
 
-        <!-- Pannello destro: Check + filiali con “Apri live” -->
+        <!-- Pannello destro -->
         <div class="flex flex-col gap-6">
           <div id="checkFilialiPanel" class="glass rounded-2xl p-5 space-y-3">
             <div class="font-medium tracking-wide mb-2">Check filiali</div>
@@ -175,15 +134,16 @@
         </div>
       </div>
 
-      <!-- Impostazioni Filiali – forzato screenstream (solo ID e Password) -->
+      <!-- Impostazioni Filiali -->
       <div class="glass rounded-2xl p-5">
         <div class="flex items-center justify-between">
           <div class="font-medium">Filiali</div>
-          <button id="btnAddFiliale" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Aggiungi filiale</button>
+          <button id="btnAddFiliale" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Aggiungi filiale</button>
         </div>
         <div id="filialiList" class="mt-4 space-y-3"></div>
         <div class="mt-2 text-xs text-slate-400">
-          Streaming forzato: <b>WebRTC (WHEP) via screenstream.io</b>. Endpoint: <code>https://screenstream.io/whep/&lt;ID&gt;</code>
+          Streaming: <b>WebRTC (WHEP)</b>. Imposta l’URL del tuo Worker o WHEP diretto (HTTPS).<br>
+          Il pulsante “Apri su ScreenStream” apre la pagina con ID e Password già compilati.
         </div>
       </div>
 
@@ -201,7 +161,7 @@
       <div id="advGate" class="space-y-3">
         <div class="text-sm text-slate-300">Inserisci password per sbloccare le impostazioni:</div>
         <input id="advPwd" type="password" class="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="Password" />
-        <button id="advUnlock" class="px-3 py-2 rounded-lg bg-amber-500/90 hover:bg-amber-500 transition">Sblocca</button>
+        <button id="advUnlock" class="px-3 py-2 rounded-lg bg-amber-500/90 hover:bg-amber-500">Sblocca</button>
       </div>
       <div id="advBody" class="hidden space-y-4">
         <div class="grid sm:grid-cols-2 gap-4">
@@ -230,7 +190,7 @@
         </div>
         <div class="text-xs text-slate-400">Origin da inserire nel Client OAuth (GitHub Pages): <code id="originsHint"></code></div>
         <div class="flex flex-wrap gap-2 justify-end">
-          <button id="advTest"  class="px-3 py-2 rounded-lg bg-blue-500/90 hover:bg-blue-500 transition">Test accesso</button>
+          <button id="advTest"  class="px-3 py-2 rounded-lg bg-blue-500/90 hover:bg-blue-500">Test accesso</button>
           <button id="advSave"  class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
           <button id="advReset" class="px-3 py-2 rounded-lg bg-red-700/80 hover:bg-red-600/80">Reset LocalStorage</button>
         </div>
@@ -254,37 +214,65 @@ const DEFAULTS = {
   LOGIN_HINT: ""
 };
 
-/** Forzatura screenstream.io (WHEP) **/
-const SCREENSTREAM_ID   = "72500366";
-const SCREENSTREAM_PASS = "LtTc05";
-const WHEP_DIRECT = `https://screenstream.io/whep/${SCREENSTREAM_ID}`;
-const WHEP_WORKER = "https://edilrepairstechnology.resinellialimentari.workers.dev/whep"; // fallback
-const AUTH_BASIC  = "Basic " + btoa(SCREENSTREAM_ID + ":" + SCREENSTREAM_PASS);
-
 /**************** STATO ****************/
 let cfg = {};
 let tokenClient;
 let gmailReady = false;
 
-// Default filiali (il live è lo stesso per tutte: screenstream.io con ID fissato)
+/* Filiali di default
+   - Castione con URL Worker preimpostato (modificabile)
+   - ID=72500366, PASS=Yachc6 (modificabili) */
 const DEFAULT_FILIALI = [
-  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch' },
-  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch' },
-  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch' },
+  {
+    id: 'castione',
+    name: 'Resinelli Castione',
+    email: 'allarmi@edilrepairs.ch',
+    streamUrl: 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep',
+    streamUser: '72500366',
+    streamPass: 'Yachc6',
+    streamMode: 'webrtc',
+    streamAudio: false
+  },
+  {
+    id: 'santantonino',
+    name: "Resinelli Sant'Antonino",
+    email: 'allarmi@edilrepairs.ch',
+    streamUrl: 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep',
+    streamUser: '72500366',
+    streamPass: 'Yachc6',
+    streamMode: 'webrtc',
+    streamAudio: false
+  },
+  {
+    id: 'losone',
+    name: 'Resinelli Losone',
+    email: 'allarmi@edilrepairs.ch',
+    streamUrl: 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep',
+    streamUser: '72500366',
+    streamPass: 'Yachc6',
+    streamMode: 'webrtc',
+    streamAudio: false
+  }
 ];
+
 let state = { username: '', filiali: [], history: {} };
 
+/**************** STORAGE ****************/
 function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
-  state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
-  state.filiali.forEach(f=>{
-    if(!f.streamUrl) f.streamUrl = WORKER_WHEP;
-    if(typeof f.streamUser!=='string') f.streamUser='';
-    if(typeof f.streamPass!=='string') f.streamPass='';
-    f.streamMode = 'webrtc'; // forza WebRTC
-    if(typeof f.streamAudio!=='boolean') f.streamAudio=false;
-  });
+  const incoming = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+  // normalizza proprietà per compatibilità con versioni precedenti
+  state.filiali = incoming.map((f,i)=>({
+    id: f.id || (['castione','santantonino','losone'][i] || ('f'+i)),
+    name: f.name || ('Filiale '+(i+1)),
+    email: f.email || 'allarmi@edilrepairs.ch',
+    streamUrl: f.streamUrl || 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep',
+    streamUser: typeof f.streamUser==='string' ? f.streamUser : (f.stream_id || ''), // compat
+    streamPass: typeof f.streamPass==='string' ? f.streamPass : (f.stream_pwd || ''),
+    streamMode: 'webrtc',
+    streamAudio: !!f.streamAudio
+  }));
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
 }
@@ -297,8 +285,15 @@ const $ = (sel)=> document.querySelector(sel);
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild }
 function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) }
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
-function isInsecureOnHttps(u){ try{ const p = new URL(u, location.href); return location.protocol==='https:' && p.protocol==='http:'; } catch{ return false; } }
 function normalizeText(s){ return (s||'').replace(/[–—−]/g,'-').replace(/\s+/g,' ').trim(); }
+function basicAuth(user, pass){ return (user || pass) ? { 'Authorization': 'Basic ' + btoa(`${user||''}:${pass||''}`) } : {}; }
+function statusCellKey(subject){
+  // Prova a estrarre "Cella X (Filiale)"
+  const m = (subject||'').match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+  if(m) return normalizeText(m[1]).toLowerCase();
+  // altrimenti usa l’intero subject normalizzato
+  return normalizeText(subject||'').toLowerCase();
+}
 
 /*********** LIVE height ***********/
 function uiBindLiveSizer() {
@@ -315,51 +310,23 @@ function uiBindLiveSizer() {
   });
 }
 
-/**************** “Viewer LAN” (manteniamo se mai servisse) ****************/
-function openLanOverlay(url){
-  const overlay = $('#lanOverlay');
-  const frame = $('#lanFrame');
-  const blocked = $('#lanBlocked');
-  const urlLbl = $('#lanUrlLabel');
-  if(!overlay || !frame || !blocked) return;
-
-  urlLbl.textContent = url;
-  overlay.classList.add('show');
-  blocked.classList.remove('show');
-  frame.removeAttribute('src'); // reset
-
-  let loaded = false;
-  frame.onload = () => { loaded = true; blocked.classList.remove('show'); };
-  frame.src = url;
-
-  setTimeout(()=>{ if(!loaded){ blocked.classList.add('show'); } }, 900);
-
-  const openExt = $('#lanExternal'), openExt2 = $('#lanOpenExternal2');
-  const replace = $('#lanReplace'), replace2 = $('#lanReplace2');
-  const closeBtn = $('#lanClose');
-
-  function openWindow(){
-    const w = 420, h = 820;
-    const left = Math.round((screen.width - w)/2);
-    const top  = Math.round((screen.height - h)/2);
-    const feat = `popup=yes,width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=no,noopener,noreferrer`;
-    const win = window.open(url, 'resinelli_live', feat);
-    if(!win) alert('Popup bloccato dal browser. Consenti i popup per questo sito.');
-    else win.focus();
+/**************** CHECK/UX ****************/
+function computeFilialeHasActiveAlarm(fid){
+  // Per ogni cella: se l’ultimo evento è 'alto' allora c’è un allarme attivo
+  const rows = (state.history[fid]||[]).slice().sort((a,b)=>a.date-b.date);
+  const lastByCell = new Map();
+  for(const r of rows){
+    const key = r.cellKey || statusCellKey(r.subject);
+    lastByCell.set(key, r.status);
   }
-  openExt?.addEventListener('click', openWindow, {once:true});
-  openExt2?.addEventListener('click', openWindow, {once:true});
-
-  function replaceHere(){ location.href = url; }
-  replace?.addEventListener('click', replaceHere, {once:true});
-  replace2?.addEventListener('click', replaceHere, {once:true});
-
-  closeBtn?.addEventListener('click', ()=>{ frame.removeAttribute('src'); overlay.classList.remove('show'); }, {once:true});
+  for(const st of lastByCell.values()){
+    if(st==='alto') return true;
+  }
+  return false;
 }
 
-/**************** CHECK FILIALI UX ****************/
-function runCheckFiliali() {
-  const rowsWrap = document.getElementById('checkFilialiRows');
+function runCheckFiliali(){
+  const rowsWrap = $('#checkFilialiRows');
   rowsWrap.innerHTML = '';
   (state.filiali || []).forEach(filiale => {
     const row = document.createElement('div'); row.className = 'flex flex-col gap-1';
@@ -380,33 +347,27 @@ function runCheckFiliali() {
       else {
         const rows = state.history[filiale.id] || [];
         const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
-        const hasAlarm = rows.some(r => r.status === 'alto');
 
-        const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
-        const RX_RANGE     = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
+        const hasActive = computeFilialeHasActiveAlarm(filiale.id);
 
         let details = '';
         if(last){
-          let cella = '';
-          const ms = (last.subject||'').match(RX_SUBJ_CELL);
-          if (ms) cella = ms[1].trim();
+          const rxRange = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
           let min = isFinite(last.min) ? last.min : NaN;
           let max = isFinite(last.max) ? last.max : NaN;
-
           if(!isFinite(min) || !isFinite(max)){
-            const mr = (last.bodyPlain || last.body || '').match(RX_RANGE);
-            if (mr){ min = parseFloat(mr[1].replace(',','.')); max = parseFloat(mr[2].replace(',','.')); }
+            const mr = (last.bodyPlain || last.body || '').match(rxRange);
+            if (mr){ min = toNumber(mr[1]); max = toNumber(mr[2]); }
           }
           const t = isFinite(last.temp) ? `${last.temp.toFixed(1)} °C` : '—';
           const r = (isFinite(min) && isFinite(max)) ? `${min}–${max} °C` : '—';
-          if (cella || isFinite(last.temp) || (isFinite(min)&&isFinite(max))){ details = ` · Cella ${cella || '—'} – ${t} (range ${r})`; }
+          details = ` · ${t} (range ${r})`;
         }
 
-        if(hasAlarm){
-          status.innerHTML = `<button class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</button>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}${details}`;
-          const btn = status.querySelector('button'); if (btn && last) btn.onclick = () => uiOpenRowDetails(last, filiale.name);
+        if(hasActive){
+          status.innerHTML = `<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}${details}`;
         } else {
-          status.innerHTML = `<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}`;
+          status.innerHTML = `<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}${details}`;
         }
       }
     }
@@ -414,30 +375,23 @@ function runCheckFiliali() {
   });
 }
 
-/**************** DESCRIZIONE PER FILIALE (Home) + pulsante “Apri live” ****************/
-function uiRenderFilialiDesc() {
+function uiRenderFilialiDesc(){
   const wrap = $('#filialiDescWrap');
   wrap.innerHTML = '';
   state.filiali.forEach(filiale => {
     const rows = state.history[filiale.id] || [];
-    const hasAlarm = rows.some(r => r.status === 'alto');
+    const hasActive = computeFilialeHasActiveAlarm(filiale.id);
     const last = rows.length ? rows.slice().sort((a,b)=>b.date-a.date)[0] : null;
 
     const card = el(`<div class="glass rounded-xl p-3 flex items-center gap-3">
       <span class="font-medium text-slate-200 flex-1 truncate">${filiale.name}</span>
-      <span class="${hasAlarm? 'px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30 cursor-pointer' : 'px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${hasAlarm?'ALLARME':'OK'}</span>
+      <span class="${hasActive? 'px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30' : 'px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${hasActive?'ALLARME':'OK'}</span>
       ${last? `<span class="hidden sm:inline ml-2 text-xs text-slate-400">${fmtDate(new Date(last.date))}</span>` : ''}
       <button class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
     </div>`);
-    if(hasAlarm){
-      card.querySelector('span:nth-child(2)').onclick = ()=> last && uiOpenRowDetails(last, filiale.name);
-      card.querySelector('span:nth-child(2)').title = 'Clicca per dettagli';
-    }
-    card.querySelector('[data-open-live]')?.addEventListener('click', ()=>{
-      // seleziona filiale e avvia la live (stesso stream screenstream)
+    card.querySelector('[data-open-live]').addEventListener('click', ()=>{
       $('#filialeSelect').value = filiale.id;
-      startWhepPreferred();
-      // scroll verso il player
+      startWhepForCurrent();
       document.getElementById('liveStreamBox')?.scrollIntoView({behavior:'smooth', block:'center'});
     });
     wrap.appendChild(card);
@@ -445,24 +399,17 @@ function uiRenderFilialiDesc() {
 }
 
 /**************** POPUP DETTAGLI ****************/
-function uiOpenRowDetails(row, filialeName) {
-  const modal = $('#rowModal');
-  const body = $('#rowModalBody');
-
-  let cella = '';
-  let filiale = filialeName || '';
-  let subject = row.subject || '';
-  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—';
-  let minmax = '—';
-
+function uiOpenRowDetails(row, filialeName){
+  const modal = $('#rowModal'); const body = $('#rowModalBody');
+  let cella = ''; let filiale = filialeName || ''; let subject = row.subject || '';
+  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—'; let minmax = '—';
   const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
   if (m) { cella = m[1].trim(); filiale = m[2].trim(); } else { cella = subject; }
   if (isFinite(row.min) && isFinite(row.max)) { minmax = row.min + '–' + row.max + ' °C'; }
-
   body.innerHTML = `
     <div class="mb-2 text-lg font-semibold">${cella}</div>
     <div class="mb-2 text-sm text-slate-400">Filiale: <span class="font-medium text-slate-200">${filiale}</span></div>
-    <div class="mb-2 text-sm text-slate-400">Temperatura attuale: <span class="font-medium text-slate-200">${temp}</span></div>
+    <div class="mb-2 text-sm text-slate-400">Temperatura: <span class="font-medium text-slate-200">${temp}</span></div>
     <div class="mb-2 text-sm text-slate-400">Range min–max: <span class="font-medium text-slate-200">${minmax}</span></div>
     <div class="mb-2 text-sm text-slate-400">Data/ora: <span class="font-medium text-slate-200">${fmtDate(new Date(row.date))}</span></div>
     <div class="mb-2 text-sm text-slate-400">Subject: <span class="font-medium text-slate-200">${subject}</span></div>
@@ -473,36 +420,16 @@ function uiOpenRowDetails(row, filialeName) {
   modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
 }
 
-/**************** ROUTER ****************/
+/**************** ROUTER & STATUS ****************/
 const routes = ['home','storico','impostazioni'];
-function setActiveTab(hash){
-  document.querySelectorAll('.tab-btn').forEach(b=>{
-    const r=b.getAttribute('data-route');
-    b.classList.toggle('active', r===hash);
-  });
-}
-function go(route){
-  routes.forEach(r=> document.getElementById('route-'+r).classList.toggle('hidden', r!==route));
-  $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
-  setActiveTab('#'+route);
-  if(route==='storico') renderStorico();
-  if(route==='home'){ checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer(); }
-  if(route==='impostazioni') renderImpostazioni();
-  history.replaceState(null, '', '#'+route);
-}
-window.addEventListener('hashchange', ()=>{
-  const r = (location.hash||'#home').slice(1);
-  if(routes.includes(r)) go(r);
-});
+function setActiveTab(hash){ document.querySelectorAll('.tab-btn').forEach(b=>{ const r=b.getAttribute('data-route'); b.classList.toggle('active', r===hash); }); }
 
-/**************** STATUS BAR (globale) ****************/
 function checkFilialiStatus(){
-  const bar = $('#statusBar'); const badges = $('#statusBadges');
-  badges.innerHTML = '';
+  const bar = $('#statusBar'); const badges = $('#statusBadges'); badges.innerHTML = '';
   const items = state.filiali.map(f=>{
     const rows = (state.history[f.id]||[]);
     const last = rows.slice().sort((a,b)=>b.date-a.date)[0];
-    const isAlarm = !!rows.find(r=>r.status==='alto');
+    const isAlarm = computeFilialeHasActiveAlarm(f.id);
     return { name:f.name, last, isAlarm };
   });
   if(!items.length){ bar.classList.add('hidden'); return }
@@ -513,84 +440,82 @@ function checkFilialiStatus(){
   bar.classList.remove('hidden');
 }
 
-/**************** IMPOSTAZIONI & STORICO ****************/
-function populateFilialeSelect(){
-  const sel = $('#filialeSelect');
-  sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+function go(route){
+  routes.forEach(r=> document.getElementById('route-'+r).classList.toggle('hidden', r!==route));
+  $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
+  setActiveTab('#'+route);
+  if(route==='storico') renderStorico();
+  if(route==='home'){ checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer(); }
+  if(route==='impostazioni') renderImpostazioni();
+  history.replaceState(null, '', '#'+route);
 }
+window.addEventListener('hashchange', ()=>{ const r = (location.hash||'#home').slice(1); if(routes.includes(r)) go(r); });
+
+/**************** IMPOSTAZIONI & STORICO ****************/
+function populateFilialeSelect(){ const sel = $('#filialeSelect'); sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join(''); }
 
 function renderImpostazioni(){
   $('#usernameInput').value = state.username || '';
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-7 gap-3 items-end">
+      <div class="grid md:grid-cols-8 gap-3 items-end">
         <label class="block text-sm text-slate-300">Nome
           <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
         </label>
         <label class="block text-sm text-slate-300">Email storico
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
-        <label class="block text-sm text-slate-300">URL stream (WHEP/HTTPS)
+        <label class="block text-sm text-slate-300">URL WHEP (HTTPS)
           <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://<tuo-worker>.workers.dev/whep" />
         </label>
         <label class="block text-sm text-slate-300">ID stream
-          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="(opzionale: non serve con Worker)" />
+          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
         </label>
         <label class="block text-sm text-slate-300">Password
-          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="(opzionale: non serve con Worker)" />
-        </label>
-        <label class="block text-sm text-slate-300" style="display:none">Modalità
-          <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" disabled>
-            <option selected value="webrtc">WebRTC (WHEP)</option>
-            <option value="iframe">Iframe</option>
-            <option value="mjpeg">MJPEG</option>
-          </select>
+          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
         </label>
         <label class="flex items-center gap-2 text-sm text-slate-300 mt-7">
           <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
-          Audio (WebRTC)
+          Audio
         </label>
-      </div>
-      <div class="mt-3 flex flex-wrap justify-between gap-2">
-        <div class="text-[11px] text-slate-400">
-          WebRTC richiede HTTPS e CORS; usa il tuo Worker come endpoint. <br/>Se l’embed non appare, prova “Apri stream”.
-        </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 mt-7">
           <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri stream</button>
-          <!-- Bottone aggiuntivo: Apri su ScreenStream -->
+          <button data-act="join" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri su ScreenStream</button>
+        </div>
+        <div class="flex gap-2 mt-7 justify-end">
+          <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
+          <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
         </div>
       </div>
     </div>`);
 
-    // Bottone "Apri su ScreenStream"
-    const workerBase = (WORKER_WHEP || '').replace(/\/whep\/?$/, '');
-    const joinBtn = document.createElement('button');
-    joinBtn.className = 'px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500';
-    joinBtn.textContent = 'Apri su ScreenStream';
-    joinBtn.addEventListener('click', ()=>{
-      const sid = encodeURIComponent(f.streamUser || '');
-      const pwd = encodeURIComponent(f.streamPass || '');
-      const url = `${workerBase}/join?sid=${sid}&pwd=${pwd}`;
-      window.open(url, '_blank', 'noopener');
-    });
-    card.querySelector('div.flex.gap-2').prepend(joinBtn);
-
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
-      card.querySelectorAll('input[data-k]').forEach(inp=>{
-        if (inp.type==='checkbox') f[inp.dataset.k] = inp.checked;
-        else f[inp.dataset.k] = inp.value;
+      card.querySelectorAll('[data-k]').forEach(inp=>{
+        const k = inp.dataset.k;
+        if (inp.type==='checkbox') f[k] = inp.checked;
+        else f[k] = inp.value;
       });
-      saveState(); populateFilialeSelect(); applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
+      saveState(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
+      alert('Salvato.');
     });
+
     card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
+      if(!confirm('Eliminare la filiale?')) return;
       state.history[f.id] = [];
       state.filiali = state.filiali.filter(x=>x.id!==f.id);
       saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
     });
+
     card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
-      const url = buildStreamUrlWithCreds(f.streamUrl, f.streamUser, f.streamPass);
-      if(url) window.open(url, '_blank', 'noopener');
+      $('#filialeSelect').value = f.id; startWhepForCurrent(); go('home');
+    });
+
+    card.querySelector('[data-act="join"]').addEventListener('click', ()=>{
+      // Se il tuo Worker espone /join che redirige a screenstream con campi compilati
+      const base = (f.streamUrl||'').replace(/\/whep\/?$/,'');
+      const url = `${base}/join?sid=${encodeURIComponent(f.streamUser||'')}&pwd=${encodeURIComponent(f.streamPass||'')}`;
+      window.open(url, '_blank', 'noopener');
     });
 
     list.appendChild(card);
@@ -598,49 +523,63 @@ function renderImpostazioni(){
 }
 
 function renderStorico(){
-  const wrap = document.getElementById('storicoWrap'); wrap.innerHTML = '';
+  const wrap = $('#storicoWrap'); wrap.innerHTML = '';
   for(const f of state.filiali){
-    const rows = (state.history[f.id]||[]).filter(r=>r.status==='alto').sort((a,b)=>b.date-a.date);
+    const rows = (state.history[f.id]||[]).slice().sort((a,b)=>b.date-a.date);
+    const openCount = (()=>{ // quanti allarmi ancora aperti
+      const lastByCell = new Map();
+      for(const r of rows.slice().reverse()){
+        const key = r.cellKey || statusCellKey(r.subject);
+        lastByCell.set(key, r.status);
+      }
+      let c=0; for(const st of lastByCell.values()){ if(st==='alto') c++; } return c;
+    })();
     const section = el(`<div class="glass rounded-2xl p-5">
-      <div class="flex items-center justify-between mb-3"><div class="font-medium">${f.name}</div><div class="text-xs text-slate-400">${rows.length} allarmi</div></div>
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-medium">${f.name}</div>
+        <div class="text-xs text-slate-400">${rows.length} eventi · ${openCount} allarmi aperti</div>
+      </div>
       <div class="overflow-x-auto"><table class="min-w-full text-sm">
-        <thead class="text-slate-400"><tr>
-          <th class="text-left py-2 pr-4">Data</th>
-          <th class="text-left py-2 pr-4">Temperatura</th>
-          <th class="text-left py-2 pr-4">Range</th>
-          <th class="text-left py-2 pr-4">Cella/Descrizione</th>
-          <th class="text-left py-2 pr-4">Stato</th>
-          <th class="text-left py-2 pr-4">Oggetto</th>
-        </tr></thead>
-        <tbody></tbody></table></div></div>`);
+        <thead class="text-slate-400">
+          <tr>
+            <th class="text-left py-2 pr-4">Data</th>
+            <th class="text-left py-2 pr-4">Stato</th>
+            <th class="text-left py-2 pr-4">Temperatura</th>
+            <th class="text-left py-2 pr-4">Range</th>
+            <th class="text-left py-2 pr-4">Cella/Descrizione</th>
+            <th class="text-left py-2 pr-4">Oggetto</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table></div></div>`);
     const tbody = section.querySelector('tbody');
-    rows.forEach(r=> {
-      let cella = '';
-      let subject = r.subject || '';
-      let minmax = '—';
+    rows.forEach(r=>{
+      let cella=''; let subject=r.subject||''; let minmax='—';
       const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
       if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')';
       else cella = subject;
       if (isFinite(r.min) && isFinite(r.max)) minmax = r.min + '–' + r.max + ' °C';
-
+      const badge = (r.status==='alto')
+        ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
+        : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>';
       const tr = el(`<tr class="border-t border-white/10 cursor-pointer hover:bg-white/5">
         <td class="py-2 pr-4 whitespace-nowrap">${fmtDate(new Date(r.date))}</td>
+        <td class="py-2 pr-4">${badge}</td>
         <td class="py-2 pr-4">${isFinite(r.temp)? (r.temp.toFixed(1)+' °C') : '—'}</td>
         <td class="py-2 pr-4">${minmax}</td>
         <td class="py-2 pr-4">${cella}</td>
-        <td class="py-2 pr-4">${r.status==='alto'? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">Alto</span>' : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>'}</td>
-        <td class="py-2 pr-4">${subject}</td>`);
-      tr.addEventListener('click', () => uiOpenRowDetails(r, f.name));
+        <td class="py-2 pr-4">${subject}</td>
+      </tr>`);
+      tr.addEventListener('click', ()=> uiOpenRowDetails(r, f.name));
       tbody.appendChild(tr);
     });
     wrap.appendChild(section);
   }
 }
 
-/**************** ====== STREAM (WebRTC WHEP forzato) ====== ****************/
+/**************** ====== STREAM (WebRTC WHEP) ====== ****************/
 let webrtcSession = null;
-
-function setStatus(msg){ const el=$('#statusBox'); if(el){ el.textContent = msg || ""; } }
+function setStatus(msg){ const el=$('#statusBox'); if(el) el.textContent = msg || ""; }
 function showError(msg){ $('#errorBox').textContent = msg || ""; }
 
 function cleanupWebRTC(){
@@ -654,21 +593,18 @@ function cleanupWebRTC(){
   }catch{}
   webrtcSession = null;
 }
-
 async function stopWhepResource(){
   if(webrtcSession?.resourceUrl){
-    try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors' }); }catch{}
+    try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{}
   }
 }
 
-async function startWhepAt(url, withAudio=false){
+async function startWhep(finalUrl, withAudio, extraHeaders = {}){
   const video = $('#webrtcVideo');
-  const none  = $('#noStream');
-  const status= (txt)=>{ try{ const host = new URL(url).host; setStatus(`[${host}] ${txt}`); }catch{ setStatus(txt); } };
+  const none = $('#noStream');
 
   showError("");
-  status("invio SDP offer…");
-
+  setStatus("connessione…");
   video.classList.remove('hidden');
   video.muted = !withAudio;
   video.playsInline = true;
@@ -679,10 +615,7 @@ async function startWhepAt(url, withAudio=false){
 
   pc.ontrack = (ev) => {
     const [stream] = ev.streams || [];
-    if (stream) {
-      video.srcObject = stream;
-      video.play().catch(()=>{});
-    }
+    if (stream) { video.srcObject = stream; video.play().catch(()=>{}); }
   };
 
   const offer = await pc.createOffer();
@@ -690,85 +623,39 @@ async function startWhepAt(url, withAudio=false){
 
   let res;
   try{
-    res = await fetch(url, {
-      method: 'POST',
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'application/sdp',
-        'Authorization': AUTH_BASIC
-      },
-      body: offer.sdp,
-      credentials: 'omit',
-    });
+    res = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type':'application/sdp', ...extraHeaders }, body: offer.sdp, mode: 'cors' });
   }catch(e){
-    showError(`Errore rete/CORS verso ${url}`);
-    status("errore rete/CORS");
-    $('#webrtcVideo').classList.add('hidden');
-    $('#noStream').classList.remove('hidden');
-    cleanupWebRTC();
-    return false;
+    showError('Connessione WHEP non raggiungibile (CORS/HTTPS).'); setStatus('errore rete'); video.classList.add('hidden'); none.classList.remove('hidden'); cleanupWebRTC(); return;
   }
+  if(!res.ok){ showError('Il server WHEP ha rifiutato la richiesta ('+res.status+').'); setStatus('HTTP '+res.status); video.classList.add('hidden'); none.classList.remove('hidden'); cleanupWebRTC(); return; }
 
-  if(!res.ok){
-    showError(`Risposta ${res.status} da ${url}`);
-    status(`HTTP ${res.status}`);
-    $('#webrtcVideo').classList.add('hidden');
-    $('#noStream').classList.remove('hidden');
-    cleanupWebRTC();
-    return false;
-  }
+  const answerSdp = await res.text();
+  const resourceUrl = res.headers.get('Location');
+  try{ await pc.setRemoteDescription({type:'answer', sdp:answerSdp}); }catch(e){ showError('SDP answer non valida.'); setStatus('answer non valida'); video.classList.add('hidden'); none.classList.remove('hidden'); cleanupWebRTC(); return; }
 
-  const answerSdp  = await res.text();
-  const resourceUrl= res.headers.get('Location') || null;
-
-  try{
-    await pc.setRemoteDescription({type:'answer', sdp:answerSdp});
-  }catch(e){
-    showError(`SDP answer non valida (${e?.message || e})`);
-    status("answer non valida");
-    $('#webrtcVideo').classList.add('hidden');
-    $('#noStream').classList.remove('hidden');
-    cleanupWebRTC();
-    return false;
-  }
-
-  webrtcSession = { pc, resourceUrl, videoEl: $('#webrtcVideo') };
-  $('#noStream').classList.add('hidden');
-  status("connesso");
-  return true;
+  webrtcSession = { pc, resourceUrl, videoEl: video, authHeaders: extraHeaders };
+  none.classList.add('hidden');
+  setStatus("connesso");
 }
 
-async function startWhepPreferred(){
-  setStatus("preparo connessione…");
-  $('#noStream').classList.remove('hidden');
-  $('#webrtcVideo').classList.add('hidden');
+function startWhepForCurrent(){
+  const id = $('#filialeSelect').value;
+  const f = state.filiali.find(x=>x.id===id);
+  if(!f){ showError('Nessuna filiale selezionata.'); return; }
 
-  await stopWhepResource();
-  cleanupWebRTC();
+  stopWhepResource().finally(cleanupWebRTC);
 
-  // 1) Diretto screenstream.io
-  const okDirect = await startWhepAt(WHEP_DIRECT, false);
-  if(okDirect) return;
+  const url = (f.streamUrl||'').trim();
+  if(!url){ $('#noStream').classList.remove('hidden'); showError('URL WHEP non configurato.'); return; }
 
-  // 2) Worker (fallback) se impostato
-  if(WHEP_WORKER){
-    await stopWhepResource(); cleanupWebRTC();
-    const okWorker = await startWhepAt(WHEP_WORKER, false);
-    if(okWorker) return;
-  }
-
-  // Messaggio finale se tutto fallisce
-  $('#noStream').classList.remove('hidden');
-  showError("Impossibile stabilire la connessione WebRTC. Verifica CORS o credenziali.");
+  const headers = basicAuth((f.streamUser||'').trim(), (f.streamPass||'').trim());
+  startWhep(url, !!f.streamAudio, headers);
 }
 
 /**************** AUTH (gapi + GIS) ****************/
 async function waitForGapiLoad(maxMs = 10000){
   const t0 = Date.now();
-  while (!window.gapi?.load) {
-    if (Date.now() - t0 > maxMs) throw new Error("gapi non caricato");
-    await new Promise(r => setTimeout(r, 50));
-  }
+  while (!window.gapi?.load) { if (Date.now() - t0 > maxMs) throw new Error("gapi non caricato"); await new Promise(r => setTimeout(r, 50)); }
 }
 async function initGapi(){
   await waitForGapiLoad();
@@ -801,7 +688,7 @@ function signIn(){
   return new Promise( async (resolve, reject)=>{
     try{
       if (!window.gapi?.client) { await initGapi(); }
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { alert('Inserisci prima il CLIENT_ID in Impostazioni avanzate.'); openAdvancedModal(); return reject(new Error('CLIENT_ID mancante')); }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return reject(new Error('CLIENT_ID mancante')); }
       if (!window.tokenClient) { initGIS(); }
       try{ window.google?.accounts?.id?.disableAutoSelect?.(); }catch{}
       try{ const tok = window.gapi?.client?.getToken?.(); if (tok?.access_token) window.google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{}); window.gapi?.client?.setToken?.(null);}catch{}
@@ -811,40 +698,39 @@ function signIn(){
   });
 }
 
-/**************** GMAIL (parsing robusto) ****************/
+/**************** GMAIL: parsing allarme/OK ****************/
 async function listMessages(q, max=200){ let msgs=[], pageToken; do{ const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken}); const d=res.result; if(d.messages) msgs.push(...d.messages); pageToken=d.nextPageToken } while(pageToken && msgs.length<max); return msgs }
 async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result }
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
 function getHeader(msg, name){ const h = msg.payload.headers.find(h=>h.name.toLowerCase()===name.toLowerCase()); return h? h.value: '' }
 
 function parseTemperatures(subject, body){
-  const s = normalizeText(subject);
-  const b = normalizeText(body);
-
-  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i)
-              || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
-
+  const s = normalizeText(subject); const b = normalizeText(body);
+  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i) || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
   const mRange = b.match(/Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i);
-
-  let temp = mTemp ? toNumber(mTemp[1]) : NaN;
-  const min = mRange ? toNumber(mRange[1]) : NaN;
-  const max = mRange ? toNumber(mRange[2]) : NaN;
-
-  if(!isFinite(temp)){
-    const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i);
-    if (near) temp = toNumber(near[1]);
-  }
+  let temp = mTemp ? toNumber(mTemp[1]) : NaN; const min = mRange ? toNumber(mRange[1]) : NaN; const max = mRange ? toNumber(mRange[2]) : NaN;
+  if(!isFinite(temp)){ const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i); if (near) temp = toNumber(near[1]); }
   if(!isFinite(temp)){
     const all = [...b.matchAll(/-?\d+(?:[.,]\d+)?/g)].map(m=>({v:toNumber(m[0]), i:m.index}));
-    if (mRange) {
-      const rs = mRange.index, re = rs + mRange[0].length;
-      const candidates = all.filter(n => n.i < rs || n.i > re);
-      if (candidates.length) temp = candidates[0].v;
-    } else if (all.length){
-      temp = all[0].v;
-    }
+    if (mRange) { const rs = mRange.index, re = rs + mRange[0].length; const candidates = all.filter(n => n.i < rs || n.i > re); if (candidates.length) temp = candidates[0].v; }
+    else if (all.length){ temp = all[0].v; }
   }
   return { temp, min, max };
+}
+
+function inferStatus(subject, body){
+  const txt = (subject + '\n' + body).toLowerCase();
+  const isAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(txt);
+  const isRestore = /(ripristin|rientrat|tornat|normalizzat|ritornat|ok|risolt|cleared|resolved)/.test(txt) && /temperatura|temp/.test(txt);
+  if(isRestore && !isAlarm) return 'ok';
+  if(isAlarm) return 'alto';
+  return null;
+}
+
+function extractCellAndFiliale(subject){
+  const m = (subject||'').match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+  if(m) return { cella: m[1].trim(), filiale: m[2].trim() };
+  return { cella: subject||'', filiale: '' };
 }
 
 async function fetchAlarms(){
@@ -859,60 +745,58 @@ async function fetchAlarms(){
       if(!part) return;
       if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; }
       if(part.parts) part.parts.forEach(extract);
-      if(part.mimeType==='text/html' && !body && part.body?.data){
-        body = decodeBody(part.body.data).replace(/<[^>]+>/g,' ');
-      }
+      if(part.mimeType==='text/html' && !body && part.body?.data){ body = decodeBody(part.body.data).replace(/<[^>]+>/g,' '); }
     })(msg.payload);
 
+    const status = inferStatus(subject, body);
+    if(!status) continue;
+
     const { temp, min, max } = parseTemperatures(subject, body);
+    const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
+    const low = (subject+'\n'+body).toLowerCase();
 
-    const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
-    const ms = subject.match(RX_SUBJ_CELL);
-
-    const low = (subject + '\n' + body).toLowerCase();
-    const isAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(low);
-    if(!isAlarm) continue;
-
-    const sito = ms ? ms[2].trim() : '';
+    // trova filiale id
     const fid = (function(){
-      if(sito){
-        const needle = sito.toLowerCase().trim();
+      if(filialeName){
+        const needle = filialeName.toLowerCase();
         const byHint = state.filiali.find(f => f.name.toLowerCase().includes(needle));
         if(byHint) return byHint.id;
       }
-      for(const f of state.filiali){ if(low.includes(f.name.toLowerCase())) return f.id }
+      for(const f of state.filiali){
+        if(low.includes(f.name.toLowerCase())) return f.id;
+      }
       return $('#filialeSelect').value || state.filiali[0]?.id;
     })();
 
-    const row = { date:+d, temp, min, max, status:'alto', subject, id:m.id, bodyPlain: body };
+    const row = {
+      date:+d, temp, min, max, status, subject, id:m.id, bodyPlain: body,
+      cellKey: normalizeText(cella).toLowerCase()
+    };
     if(!state.history[fid]) state.history[fid]=[];
     if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
   }
-  for(const fid of Object.keys(state.history)){ state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000) }
+  // mantieni dimensione e ordina
+  for(const fid of Object.keys(state.history)){
+    state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000);
+  }
   saveState();
   checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
   if(location.hash==='#storico') renderStorico();
 }
 
-/******************* OPEN ADVANCED MODAL (helper) *******************/
+/**************** ADVANCED MODAL ****************/
 function openAdvancedModal() {
-  const modal = document.getElementById('advModal');
-  const gate  = document.getElementById('advGate');
-  const body  = document.getElementById('advBody');
+  const modal = $('#advModal'); const gate = $('#advGate'); const body = $('#advBody');
   if (!modal || !gate || !body) return;
-  modal.classList.add('show');
-  gate.classList.remove('hidden');
-  body.classList.add('hidden');
-  const host = location.host;
-  const o = document.getElementById('originsHint');
-  if (o) o.textContent = `https://${host}`;
-  document.getElementById('advClientId').value = cfg?.CLIENT_ID || '';
-  document.getElementById('advApiKey').value = cfg?.API_KEY || '';
-  document.getElementById('advGmailQuery').value = cfg?.GMAIL_QUERY || '';
-  document.getElementById('advTempRx').value = cfg?.TEMP_RX || '';
-  document.getElementById('advLoginHint').value = cfg?.LOGIN_HINT || '';
-  document.getElementById('advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '';
-  setTimeout(()=>{ document.getElementById('advPwd').focus(); }, 100);
+  modal.classList.add('show'); gate.classList.remove('hidden'); body.classList.add('hidden');
+  const host = location.host; $('#originsHint').textContent = `https://${host}`;
+  $('#advClientId').value = cfg?.CLIENT_ID || '';
+  $('#advApiKey').value = cfg?.API_KEY || '';
+  $('#advGmailQuery').value = cfg?.GMAIL_QUERY || '';
+  $('#advTempRx').value = cfg?.TEMP_RX || '';
+  $('#advLoginHint').value = cfg?.LOGIN_HINT || '';
+  $('#advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '';
+  setTimeout(()=>{ $('#advPwd').focus(); }, 100);
 }
 
 /**************** BOOT ****************/
@@ -920,20 +804,23 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   loadState();
   populateFilialeSelect();
 
-  document.querySelectorAll('.route-btn').forEach(b=>{
-    b.addEventListener('click', ()=> go(b.dataset.route.slice(1)));
-  });
-  const initial = (location.hash || '#home');
-  setActiveTab(initial);
-  go((initial||'#home').slice(1));
+  document.querySelectorAll('.route-btn').forEach(b=> b.addEventListener('click', ()=> go(b.dataset.route.slice(1))));
+  const initial = (location.hash || '#home'); setActiveTab(initial); go((initial||'#home').slice(1));
 
-  $('#filialeSelect').addEventListener('change', ()=> startWhepPreferred());
-
+  $('#filialeSelect').addEventListener('change', ()=> startWhepForCurrent());
   if (state.filiali[0]) $('#filialeSelect').value = state.filiali[0].id;
+
   checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
 
-  // Bottoni live
-  $('#btnReconnect').addEventListener('click', ()=> startWhepPreferred());
+  // LIVE controls
+  $('#btnReconnect').addEventListener('click', ()=> startWhepForCurrent());
+  $('#btnOpenSS').addEventListener('click', ()=>{
+    const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
+    if(!f) return;
+    const base = (f.streamUrl||'').replace(/\/whep\/?$/,'');
+    const url = `${base}/join?sid=${encodeURIComponent(f.streamUser||'')}&pwd=${encodeURIComponent(f.streamPass||'')}`;
+    window.open(url,'_blank','noopener');
+  });
 
   // Profilo & filiali
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
@@ -941,59 +828,47 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     state.filiali.push({
       id: (crypto?.randomUUID?.() || ('f'+Date.now())),
       name: 'Nuova filiale',
-      email: 'allarmi@edilrepairs.ch'
+      email: 'allarmi@edilrepairs.ch',
+      streamUrl: 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep',
+      streamUser: '',
+      streamPass: '',
+      streamMode: 'webrtc',
+      streamAudio: false
     });
-    saveState();
-    renderImpostazioni();
-    populateFilialeSelect();
+    saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
-  document.getElementById('btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
-  document.getElementById('advClose').onclick = ()=> document.getElementById('advModal').classList.remove('show');
-  document.getElementById('advUnlock').onclick = ()=>{
-    if(document.getElementById('advPwd').value==='979851'){
-      document.getElementById('advGate').classList.add('hidden');
-      document.getElementById('advBody').classList.remove('hidden');
-      setTimeout(()=>{ document.getElementById('advClientId').focus(); }, 100);
-    }else{
-      alert('Password errata');
-    }
-  };
-  document.getElementById('advSave').onclick = ()=>{
-    cfg.CLIENT_ID  = document.getElementById('advClientId').value.trim();
-    cfg.API_KEY    = document.getElementById('advApiKey').value.trim();
-    cfg.GMAIL_QUERY= document.getElementById('advGmailQuery').value.trim();
-    cfg.TEMP_RX    = document.getElementById('advTempRx').value.trim();
-    cfg.LOGIN_HINT = document.getElementById('advLoginHint').value.trim();
-    cfg.SCOPES     = document.getElementById('advScopes').value.trim() || DEFAULTS.SCOPES;
+  // Advanced modal
+  $('#btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
+  $('#advClose').onclick = ()=> $('#advModal').classList.remove('show');
+  $('#advUnlock').onclick = ()=>{ if($('#advPwd').value==='979851'){ $('#advGate').classList.add('hidden'); $('#advBody').classList.remove('hidden'); setTimeout(()=>$('#advClientId').focus(),100); } else { alert('Password errata'); } };
+  $('#advSave').onclick = ()=>{
+    cfg.CLIENT_ID  = $('#advClientId').value.trim();
+    cfg.API_KEY    = $('#advApiKey').value.trim();
+    cfg.GMAIL_QUERY= $('#advGmailQuery').value.trim();
+    cfg.TEMP_RX    = $('#advTempRx').value.trim();
+    cfg.LOGIN_HINT = $('#advLoginHint').value.trim();
+    cfg.SCOPES     = $('#advScopes').value.trim() || DEFAULTS.SCOPES;
     saveState();
     initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e)));
-    document.getElementById('advModal')?.classList.remove('show');
+    $('#advModal')?.classList.remove('show');
   };
-  document.getElementById('advTest').onclick = async ()=>{
-    try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); }
-    catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
-  };
-  document.getElementById('advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
+  $('#advTest').onclick = async ()=>{ try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); } };
+  $('#advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
 
   async function forceAccountChooser(){
     try{
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-        openAdvancedModal();
-        return;
-      }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
       if (!window.gapi?.client) { await initGapi(); }
       if (!window.tokenClient) { initGIS(); }
-      signOut();
-      await new Promise(r=>setTimeout(r,50));
-      await signIn();
-      await fetchAlarms();
-    }catch(e){
-      alert('Errore login: ' + (e?.message || e));
-    }
+      signOut(); await new Promise(r=>setTimeout(r,50)); await signIn(); await fetchAlarms();
+    }catch(e){ alert('Errore login: ' + (e?.message || e)); }
   }
-  document.getElementById('btnSignIn').onclick = forceAccountChooser;
-  document.getElementById('btnChangeAccount').onclick = forceAccountChooser;
+  $('#btnSignIn').onclick = forceAccountChooser;
+  $('#btnChangeAccount').onclick = forceAccountChooser;
+
+  // avvia la live della filiale corrente
+  startWhepForCurrent();
 
   // cleanup WebRTC su unload
   window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); });
