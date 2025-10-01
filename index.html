@@ -45,6 +45,9 @@
     /* Tabs */
     .tab-btn{ border-bottom:2px solid transparent; }
     .tab-btn.active{ color:#fff; border-color: var(--acc2); }
+
+    /* Helper badge */
+    .badge{ display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.2rem .5rem; border-radius:.5rem; border:1px solid transparent }
   </style>
 </head>
 <body>
@@ -206,7 +209,7 @@ const DEFAULTS = {
   API_KEY: "",
   SCOPES: "https://www.googleapis.com/auth/gmail.readonly",
   GMAIL_QUERY: "newer_than:30d (subject:(temperatura) OR subject:(allarme) OR subject:(temperature))",
-  TEMP_RX: "(-?\\d+(?:[\\.,]\\d+)?)\\s*°?\\s*[Cc]",
+  TEMP_RX: "(-?\\d+(?:[\\.,]\\d+)?)\\s*(?:°\\s*[Cc]|gradi)",
   LOGIN_HINT: ""
 };
 
@@ -215,11 +218,11 @@ let cfg = {};
 let tokenClient; // GIS
 let gmailReady = false;
 
-// DEFAULT FILIALI
+// DEFAULT FILIALI (ora con user/pass stream)
 const DEFAULT_FILIALI = [
-  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
-  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
-  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: '', streamMode: 'iframe' },
+  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'iframe' },
+  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'iframe' },
+  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'iframe' },
 ];
 let state = { username: '', filiali: [], history: {} };
 
@@ -227,6 +230,12 @@ function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
   state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+  // ✅ assicura che le nuove chiavi esistano
+  state.filiali.forEach(f=>{
+    if(typeof f.streamUser!=='string') f.streamUser='';
+    if(typeof f.streamPass!=='string') f.streamPass='';
+    if(!f.streamMode) f.streamMode='iframe';
+  });
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
 }
@@ -239,11 +248,29 @@ const $ = (sel)=> document.querySelector(sel);
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild }
 function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) }
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
-function buildTempRx(){ return new RegExp(cfg.TEMP_RX, 'i') }
 function originsString(){ const host = location.host; return `https://${host}` }
 function isInsecureOnHttps(u){
   try{ const p = new URL(u, location.href); return location.protocol==='https:' && p.protocol==='http:'; }
   catch{ return false; }
+}
+function normalizeText(s){ 
+  return (s||'')
+    .replace(/[–—−]/g,'-')   // trattini Unicode → "-"
+    .replace(/\s+/g,' ')     // spazi multipli → uno
+    .trim(); 
+}
+
+/** Costruisce l’URL con Basic Auth se user/pass sono presenti */
+function buildStreamUrlWithCreds(base, user, pass){
+  if(!base) return '';
+  try{
+    const u = new URL(base, location.href);
+    if(user) u.username = user;   // il browser encoderà in automatico
+    if(pass) u.password = pass;
+    return u.toString();
+  }catch{
+    return base; // fallback
+  }
 }
 
 /**************** LIVE SIZER ****************/
@@ -314,7 +341,7 @@ function runCheckFiliali() {
           let min = isFinite(last.min) ? last.min : NaN;
           let max = isFinite(last.max) ? last.max : NaN;
 
-          if(!isFinite(min) || !isFinite(max)){
+        if(!isFinite(min) || !isFinite(max)){
             const mr = (last.bodyPlain || last.body || '').match(RX_RANGE);
             if (mr){ min = parseFloat(mr[1].replace(',','.')); max = parseFloat(mr[2].replace(',','.')); }
           }
@@ -439,15 +466,21 @@ function renderImpostazioni(){
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-4 gap-3 items-end">
+      <div class="grid md:grid-cols-6 gap-3 items-end">
         <label class="block text-sm text-slate-300">Nome
           <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
         </label>
         <label class="block text-sm text-slate-300">Email storico
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
-        <label class="block text-sm text-slate-300">URL dispositivo (stream)
-          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://" />
+        <label class="block text-sm text-slate-300">URL dispositivo (HTTPS)
+          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://..." />
+        </label>
+        <label class="block text-sm text-slate-300">ID stream
+          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="username" />
+        </label>
+        <label class="block text-sm text-slate-300">Password stream
+          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="••••••••" />
         </label>
         <label class="block text-sm text-slate-300">Modalità
           <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
@@ -456,11 +489,20 @@ function renderImpostazioni(){
           </select>
         </label>
       </div>
-      <div class="mt-3 flex justify-end gap-2">
-        <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
-        <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
+      <div class="mt-3 flex flex-wrap justify-between gap-2">
+        <div class="text-[11px] text-slate-400">
+          Suggerimento: con HTTPS + Basic Auth alcuni browser possono bloccare l’embed.<br/>
+          In tal caso usa il link “Apri in nuova scheda”.
+        </div>
+        <div class="flex gap-2">
+          <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri stream</button>
+          <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
+          <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
+        </div>
       </div>
     </div>`);
+
+    // azioni
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
       card.querySelectorAll('input,select').forEach(inp=>{ f[inp.dataset.k] = inp.value });
       saveState(); populateFilialeSelect(); applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
@@ -470,6 +512,11 @@ function renderImpostazioni(){
       state.filiali = state.filiali.filter(x=>x.id!==f.id);
       saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
     });
+    card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
+      const url = buildStreamUrlWithCreds(f.streamUrl, f.streamUser, f.streamPass);
+      if(url) window.open(url, '_blank', 'noopener');
+    });
+
     list.appendChild(card);
   });
 }
@@ -522,16 +569,21 @@ function applyStreamForCurrent(){
 
   iframe.classList.add('hidden'); img.classList.add('hidden'); none.classList.remove('hidden');
   none.innerHTML = 'Nessun URL stream configurato';
-  // rimuovi eventuale badge mixed content
   liveBox.querySelector('.mixed-content-badge')?.remove();
+  liveBox.querySelector('.auth-badge')?.remove();
 
   if(!f?.streamUrl) return;
-  if (isInsecureOnHttps(f.streamUrl)) {
+
+  // Applica user/pass se presenti
+  const finalUrl = buildStreamUrlWithCreds(f.streamUrl, f.streamUser, f.streamPass);
+
+  // Mixed content check
+  if (isInsecureOnHttps(finalUrl)) {
     none.innerHTML = `
       <div class="space-y-2 text-center">
         <div class="text-slate-300 text-sm">Lo stream è <span class="font-semibold">HTTP</span> e non può essere caricato su una pagina <span class="font-semibold">HTTPS</span>.</div>
         <div class="text-xs text-slate-400">Usa un URL <span class="font-semibold">HTTPS</span> (es. ngrok/Cloudflare Tunnel) oppure apri l’app in locale via HTTP.</div>
-        <a href="${f.streamUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri lo stream in nuova scheda (non sicuro)</a>
+        <a href="${finalUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri lo stream in nuova scheda (non sicuro)</a>
       </div>`;
     const badgeDiv = document.createElement('div');
     badgeDiv.className = "mixed-content-badge absolute top-2 right-2 px-2 py-0.5 rounded bg-amber-500/80 text-amber-900 text-xs font-semibold shadow";
@@ -539,10 +591,39 @@ function applyStreamForCurrent(){
     liveBox.appendChild(badgeDiv);
     return;
   }
+
+  // Badge se si usa Basic Auth
+  if ((f.streamUser||'') || (f.streamPass||'')){
+    const b = document.createElement('div');
+    b.className = "auth-badge absolute top-2 left-2 badge bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
+    b.textContent = "🔒 HTTPS + Auth";
+    liveBox.appendChild(b);
+  }
+
   const mode = f.streamMode || 'iframe';
   none.classList.add('hidden');
-  if(mode==='iframe'){ iframe.src = f.streamUrl; iframe.classList.remove('hidden'); }
-  else { img.src = f.streamUrl; img.classList.remove('hidden'); }
+
+  // Nota: alcune camere impostano X-Frame-Options/Content-Security-Policy che blocca l’embed.
+  // In tal caso, l’iframe resterà vuoto: offriamo un link di fallback.
+  let fallbackTimer;
+  if(mode==='iframe'){
+    iframe.src = finalUrl;
+    iframe.classList.remove('hidden');
+    clearTimeout(fallbackTimer);
+    fallbackTimer = setTimeout(()=>{
+      if(iframe.contentWindow === null){ // non conclusivo, ma mostra il link dopo un po'
+        none.classList.remove('hidden');
+        none.innerHTML = `
+          <div class="space-y-2 text-center">
+            <div class="text-slate-300 text-sm">Se lo stream non appare, potrebbe essere bloccato dall’host (X-Frame-Options/Frame-Ancestors).</div>
+            <a href="${finalUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova scheda</a>
+          </div>`;
+      }
+    }, 2000);
+  } else {
+    img.src = finalUrl;
+    img.classList.remove('hidden');
+  }
 }
 
 /**************** AUTH (gapi + GIS) ****************/
@@ -620,11 +701,41 @@ function signIn(){
   });
 }
 
-/**************** GMAIL ****************/
+/**************** GMAIL (parsing robusto) ****************/
 async function listMessages(q, max=200){ let msgs=[], pageToken; do{ const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken}); const d=res.result; if(d.messages) msgs.push(...d.messages); pageToken=d.nextPageToken } while(pageToken && msgs.length<max); return msgs }
 async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result }
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
 function getHeader(msg, name){ const h = msg.payload.headers.find(h=>h.name.toLowerCase()===name.toLowerCase()); return h? h.value: '' }
+
+/* Estrae 20.1 da "temperatura ... è di 20.1 gradi" ed il range "da -8.0 a 12.0" */
+function parseTemperatures(subject, body){
+  const s = normalizeText(subject);
+  const b = normalizeText(body);
+
+  // 1) temperatura attuale (prioritaria)
+  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i)
+              || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
+
+  // 2) range minimo/massimo
+  const mRange = b.match(/Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i);
+
+  let temp = mTemp ? toNumber(mTemp[1]) : NaN;
+  const min = mRange ? toNumber(mRange[1]) : NaN;
+  const max = mRange ? toNumber(mRange[2]) : NaN;
+
+  // 3) Fallback: primo numero fuori dal blocco "da ... a ..."
+  if(!isFinite(temp)){
+    const all = [...b.matchAll(/-?\d+(?:[.,]\d+)?/g)].map(m=>({v:toNumber(m[0]), i:m.index}));
+    if (mRange) {
+      const rs = mRange.index, re = rs + mRange[0].length;
+      const candidates = all.filter(n => n.i < rs || n.i > re);
+      if (candidates.length) temp = candidates[0].v;
+    } else if (all.length){
+      temp = all[0].v;
+    }
+  }
+  return { temp, min, max };
+}
 
 async function fetchAlarms(){
   const q = cfg.GMAIL_QUERY;
@@ -643,15 +754,11 @@ async function fetchAlarms(){
       }
     })(msg.payload);
 
-    const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
-    const RX_RANGE     = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
+    // Estrazione temperature e range
+    const { temp, min, max } = parseTemperatures(subject, body);
 
+    const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
     const ms = subject.match(RX_SUBJ_CELL);
-    const mr = (body||'').match(RX_RANGE);
-    const min = mr ? parseFloat(mr[1].replace(',','.')) : NaN;
-    const max = mr ? parseFloat(mr[2].replace(',','.')) : NaN;
-    const mtemp = (body||'').match(buildTempRx());
-    const temp = mtemp ? parseFloat(mtemp[1].replace(',','.')) : NaN;
 
     const low = (subject + '\n' + body).toLowerCase();
     const isAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(low);
@@ -731,6 +838,8 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       name: 'Nuova filiale',
       email: 'allarmi@edilrepairs.ch',
       streamUrl: '',
+      streamUser: '',
+      streamPass: '',
       streamMode: 'iframe'
     });
     saveState();
