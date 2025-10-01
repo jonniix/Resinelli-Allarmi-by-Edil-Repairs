@@ -26,7 +26,7 @@
     .brand-grad{ background:linear-gradient(90deg,var(--acc),var(--acc2)); }
     .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
     .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
-    .stream-media{ width:100%; height:100%; object-fit:contain; background:#000 }
+    .stream-media, .stream-frame{ width:100%; height:100%; object-fit:contain; background:#000; border:0 }
     .scanbar{ position:relative; overflow:hidden }
     .scanbar::after{ content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent); transform:translateX(-100%); animation:scan 2.2s infinite }
     @keyframes scan{ 0%{transform:translateX(-100%)} 60%{transform:translateX(100%)} 100%{transform:translateX(100%)} }
@@ -36,7 +36,10 @@
     .tab-btn{ border-bottom:2px solid transparent }
     .tab-btn.active{ color:#fff; border-color:var(--acc2) }
     .badge{ display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.2rem .5rem; border-radius:.5rem; border:1px solid transparent }
-    .no-select { user-select:none; -webkit-user-select:none; }
+
+    .live-toolbar{ position:absolute; inset:0 0 auto 0; height:40px; display:flex; gap:.5rem; align-items:center; padding:.25rem .5rem; background:rgba(2,6,23,.65); z-index:2; }
+    #statusBox{ position:absolute; left:0; right:0; top:42px; z-index:2; }
+    .min-h-5{ min-height:1.25rem }
   </style>
 </head>
 <body>
@@ -88,25 +91,41 @@
     <!-- ROUTES -->
     <section id="route-home" class="space-y-6">
       <div class="grid md:grid-cols-[minmax(360px,760px),1fr] gap-6">
-        <!-- LIVE (screenstream.io) -->
+        <!-- LIVE -->
         <div class="stream-outer">
           <div class="mb-2 flex items-center gap-3">
             <div class="flex-1">
               <label class="block text-xs text-slate-400 mb-1">Dimensione schermo LIVE</label>
               <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
             </div>
-            <button id="btnReloadLive" class="mt-6 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Ricarica</button>
-            <button id="btnOpenSS" class="mt-6 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600">Apri screenstream.io</button>
+            <button id="btnReconnect" class="mt-6 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Riconnetti</button>
+            <button id="btnOpenProvider" class="mt-6 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600">Apri sito live</button>
           </div>
+
           <div class="stream-box" id="liveStreamBox">
-            <div id="statusBox" class="absolute left-0 right-0 top-0 p-2 text-center text-xs text-slate-300"></div>
-            <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Caricamento screenstream.io…</div>
-            <iframe id="screenStreamFrame" class="hidden stream-media" src="https://screenstream.io/" referrerpolicy="no-referrer" loading="lazy" sandbox="allow-scripts allow-forms allow-pointer-lock allow-popups allow-same-origin"></iframe>
+            <div class="live-toolbar">
+              <div class="text-xs sm:text-sm truncate">
+                <span class="opacity-60">Provider:</span> <span id="liveProvider" class="font-medium">—</span>
+                <span class="mx-2">·</span>
+                <span class="opacity-80">ID:</span> <span id="liveSid" class="font-mono"></span>
+                <span class="mx-2">·</span>
+                <span class="opacity-80">Password:</span> <span id="livePwd" class="font-mono"></span>
+              </div>
+              <div class="ml-auto flex items-center gap-2">
+                <button id="btnCopySid" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Copia ID</button>
+                <button id="btnCopyPwd" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Copia Password</button>
+              </div>
+            </div>
+
+            <div id="statusBox" class="p-2 text-center text-xs text-slate-300"></div>
+            <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessuna live avviata</div>
+            <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
+            <iframe id="liveFrame" class="hidden stream-frame" allow="camera; microphone; display-capture"></iframe>
           </div>
           <div id="errorBox" class="text-xs text-rose-300 min-h-5"></div>
         </div>
 
-        <!-- Pannello destro -->
+        <!-- Colonna destra -->
         <div class="flex flex-col gap-6">
           <div id="checkFilialiPanel" class="glass rounded-2xl p-5 space-y-3">
             <div class="font-medium tracking-wide mb-2">Check filiali</div>
@@ -143,7 +162,8 @@
         </div>
         <div id="filialiList" class="mt-4 space-y-3"></div>
         <div class="mt-2 text-xs text-slate-400">
-          Il pulsante “Apri screenstream.io” apre la pagina ufficiale; usa l’ID e la Password visualizzati per accedere alla live.
+          <b>Provider VDO.Ninja</b> = embed diretto in pagina (consigliato).<br>
+          <b>ScreenStream (sito)</b> = apre screenstream.io in nuova scheda con ID/Password compilati.
         </div>
       </div>
 
@@ -206,12 +226,12 @@
 <script>
 /**************** CONFIG ****************/
 const DEFAULTS = {
-  CLIENT_ID: "882609618607-c0e975cg1ughd4bi76hnee58c2ka6h2m.apps.googleusercontent.com", // default richiesto
+  CLIENT_ID: "882609618607-c0e975cg1ughd4bi76hnee58c2ka6h2m.apps.googleusercontent.com",
   API_KEY: "",
   SCOPES: "https://www.googleapis.com/auth/gmail.readonly",
   GMAIL_QUERY: "newer_than:30d (subject:(temperatura) OR subject:(allarme) OR subject:(temperature))",
   TEMP_RX: "(-?\\d+(?:[\\.,]\\d+)?)\\s*(?:°\\s*[Cc]|gradi)",
-  LOGIN_HINT: "resinellialimentari@gmail.com" // default richiesto
+  LOGIN_HINT: "resinellialimentari@gmail.com"
 };
 
 /**************** STATO ****************/
@@ -219,31 +239,40 @@ let cfg = {};
 let tokenClient;
 let gmailReady = false;
 
-/* Filiali di default */
+/* Provider supportati:
+   - 'vdo'  -> VDO.Ninja (iframe, consigliato)
+   - 'ssite'-> ScreenStream (apre sito esterno con join precompilato)
+*/
 const DEFAULT_FILIALI = [
   {
     id: 'castione',
     name: 'Resinelli Castione',
     email: 'allarmi@edilrepairs.ch',
-    streamUrl: 'https://screenstream.io/',
-    streamUser: '72500366',
-    streamPass: 'Yachc6'
+    provider: 'vdo',
+    streamUrl: '',               // non usato per vdo
+    streamUser: '72500366',      // ID/alias
+    streamPass: 'Yachc6',        // Password attuale
+    streamAudio: false
   },
   {
     id: 'santantonino',
     name: "Resinelli Sant'Antonino",
     email: 'allarmi@edilrepairs.ch',
-    streamUrl: 'https://screenstream.io/',
+    provider: 'vdo',
+    streamUrl: '',
     streamUser: '72500366',
-    streamPass: 'Yachc6'
+    streamPass: 'Yachc6',
+    streamAudio: false
   },
   {
     id: 'losone',
     name: 'Resinelli Losone',
     email: 'allarmi@edilrepairs.ch',
-    streamUrl: 'https://screenstream.io/',
+    provider: 'vdo',
+    streamUrl: '',
     streamUser: '72500366',
-    streamPass: 'Yachc6'
+    streamPass: 'Yachc6',
+    streamAudio: false
   }
 ];
 
@@ -253,15 +282,17 @@ let state = { username: '', filiali: [], history: {} };
 function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
-  state.filiali = (Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI)))
-    .map((f,i)=>({
-      id: f.id || (['castione','santantonino','losone'][i] || ('f'+i)),
-      name: f.name || ('Filiale '+(i+1)),
-      email: f.email || 'allarmi@edilrepairs.ch',
-      streamUrl: f.streamUrl || 'https://screenstream.io/',
-      streamUser: typeof f.streamUser==='string' ? f.streamUser : (f.stream_id || ''),
-      streamPass: typeof f.streamPass==='string' ? f.streamPass : (f.stream_pwd || '')
-    }));
+  const incoming = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+  state.filiali = incoming.map((f,i)=>({
+    id: f.id || ('f'+i),
+    name: f.name || ('Filiale '+(i+1)),
+    email: f.email || 'allarmi@edilrepairs.ch',
+    provider: f.provider || 'vdo',
+    streamUrl: f.streamUrl || '',
+    streamUser: (typeof f.streamUser==='string' ? f.streamUser : ''),
+    streamPass: (typeof f.streamPass==='string' ? f.streamPass : ''),
+    streamAudio: !!f.streamAudio
+  }));
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
 }
@@ -275,30 +306,10 @@ function el(html){ const t=document.createElement('template'); t.innerHTML=html.
 function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) }
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
 function normalizeText(s){ return (s||'').replace(/[–—−]/g,'-').replace(/\s+/g,' ').trim(); }
-function statusCellKey(subject){
-  const m = (subject||'').match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
-  if(m) return normalizeText(m[1]).toLowerCase();
-  return normalizeText(subject||'').toLowerCase();
-}
-function copyText(text){
-  if (!text) return;
-  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-  const ta = document.createElement('textarea');
-  ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-}
-function bindCopyOnly(){
-  document.querySelectorAll('[data-copy]').forEach(el=>{
-    el.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const t = (el.dataset.copy ?? el.textContent ?? '').trim();
-      copyText(t);
-      el.classList.add('ring-2','ring-emerald-500/60','rounded');
-      setTimeout(()=> el.classList.remove('ring-2','ring-emerald-500/60','rounded'), 600);
-    }, {passive:true});
-  });
-}
+function statusCellKey(subject){ const m=(subject||'').match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i); return m? normalizeText(m[1]).toLowerCase() : normalizeText(subject||'').toLowerCase(); }
+function copyTxt(t){ try{ return navigator.clipboard.writeText(t||''); }catch{} }
 
-/*********** LIVE height + status ***********/
+/*********** LIVE height ***********/
 function uiBindLiveSizer() {
   const input = $('#liveSize');
   const box = $('#liveStreamBox');
@@ -312,115 +323,130 @@ function uiBindLiveSizer() {
     box.style.setProperty('--live-h', val + 'svh');
   });
 }
-function updateLiveCredentialsBanner(){
-  const id = $('#filialeSelect').value;
-  const f = state.filiali.find(x=>x.id===id);
-  const box = $('#statusBox');
-  if (!f || !box) return;
-  box.innerHTML = `
-    <span class="inline-flex gap-2 items-center justify-center">
-      <span class="text-[11px] text-slate-300">ID:</span>
-      <button class="text-[11px] underline decoration-dotted" data-copy="${(f.streamUser||'')}">${(f.streamUser||'')}</button>
-      <span class="mx-2">·</span>
-      <span class="text-[11px] text-slate-300">Password:</span>
-      <button class="text-[11px] underline decoration-dotted" data-copy="${(f.streamPass||'')}">${(f.streamPass||'')}</button>
-    </span>`;
-  bindCopyOnly();
+
+/**************** LIVE (provider-aware) ****************/
+let webrtcSession = null;
+function setStatus(msg){ const el=$('#statusBox'); if(el) el.textContent = msg || ""; }
+function showError(msg){ $('#errorBox').textContent = msg || ""; }
+function cleanupWebRTC(){ try{ if(webrtcSession?.pc){ webrtcSession.pc.getTransceivers?.().forEach(t=>t.stop?.()); webrtcSession.pc.getSenders?.().forEach(s=>s.track?.stop?.()); webrtcSession.pc.getReceivers?.().forEach(r=>r.track?.stop?.()); webrtcSession.pc.close?.(); } }catch{} webrtcSession=null; }
+async function stopWhepResource(){ if(webrtcSession?.resourceUrl){ try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{} } }
+
+function buildVdoViewUrl(id, pwd, label){
+  const p = new URLSearchParams();
+  if (id)  p.set('view', id);
+  if (pwd) p.set('password', pwd);   // VDO.Ninja accetta "password"
+  p.set('cleanoutput','1');          // UI minimale
+  p.set('autostart','1');            // auto-play se possibile
+  p.set('label', label || 'Live');   // etichetta
+  p.set('embed','1');
+  return `https://vdo.ninja/?${p.toString()}`;
+}
+function buildVdoPushUrl(id, pwd){
+  const p = new URLSearchParams();
+  if (id)  p.set('push', id);
+  if (pwd) p.set('password', pwd);
+  p.set('screenshare','1');  // condivisione schermo su telefono
+  p.set('autostart','1');
+  p.set('cleanish','1');
+  return `https://vdo.ninja/?${p.toString()}`;
+}
+function buildScreenStreamJoinUrl(id, pwd){
+  // apre il sito con i campi da compilare manualmente se non prende query
+  return `https://screenstream.io/`; // il form compare lì; i browser bloccheranno l'auto-compilazione cross origin
+}
+
+function updateLiveToolbar(){
+  const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
+  $('#liveProvider').textContent = f?.provider === 'vdo' ? 'VDO.Ninja' : 'ScreenStream (sito)';
+  $('#liveSid').textContent = f?.streamUser || '—';
+  $('#livePwd').textContent = f?.streamPass || '—';
+}
+
+async function startLiveForCurrent(){
+  const frame = $('#liveFrame'); const video = $('#webrtcVideo'); const none = $('#noStream');
+  frame.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden');
+  setStatus(''); showError('');
+  await stopWhepResource(); cleanupWebRTC();
+
+  const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
+  if(!f){ showError('Nessuna filiale selezionata.'); return; }
+  updateLiveToolbar();
+
+  if (f.provider === 'vdo'){
+    const url = buildVdoViewUrl(f.streamUser, f.streamPass, f.name);
+    frame.src = url;
+    frame.classList.remove('hidden');
+    none.classList.add('hidden');
+    setStatus('VDO.Ninja embed');
+    return;
+  }
+
+  // Provider: screenstream (solo sito esterno). Dentro il riquadro lasciamo un messaggio.
+  none.classList.remove('hidden');
+  none.innerHTML = `<div class="text-center text-sm text-slate-300">
+    Usa il pulsante <b>Apri sito live</b> per aprire screenstream.io in nuova scheda.<br/>
+    ID: <span class="font-mono">${f.streamUser||'—'}</span> · Password: <span class="font-mono">${f.streamPass||'—'}</span>
+  </div>`;
+  setStatus('ScreenStream (apri in nuova scheda)');
 }
 
 /**************** CHECK/UX ****************/
 function computeFilialeHasActiveAlarm(fid){
   const rows = (state.history[fid]||[]).slice().sort((a,b)=>a.date-b.date);
   const lastByCell = new Map();
-  for(const r of rows){
-    const key = r.cellKey || statusCellKey(r.subject);
-    lastByCell.set(key, r.status);
-  }
-  for(const st of lastByCell.values()){
-    if(st==='alto') return true;
-  }
+  for(const r of rows){ const key = r.cellKey || statusCellKey(r.subject); lastByCell.set(key, r.status); }
+  for(const st of lastByCell.values()){ if(st==='alto') return true; }
   return false;
 }
-
 function runCheckFiliali(){
-  const rowsWrap = $('#checkFilialiRows');
-  rowsWrap.innerHTML = '';
-  (state.filiali || []).forEach(filiale => {
-    const row = document.createElement('div'); row.className = 'flex flex-col gap-1';
-    const top = document.createElement('div'); top.className = 'flex items-center gap-3';
-    const name = document.createElement('span'); name.className = 'w-56 text-sm text-slate-300 truncate'; name.textContent = filiale.name; top.appendChild(name);
-    const bar = document.createElement('div'); bar.className = 'relative flex-1 h-2 rounded-full bg-white/10 overflow-hidden';
-    const fill = document.createElement('div'); fill.className = 'h-full w-0 rounded-full bg-emerald-500/70 transition-[width] duration-300';
-    bar.appendChild(fill); top.appendChild(bar);
-    const status = document.createElement('div'); status.className = 'text-xs text-slate-400'; status.setAttribute('aria-live','polite');
-    row.appendChild(top); row.appendChild(status); rowsWrap.appendChild(row);
-
-    let start = null;
-    function step(ts){
-      if(!start) start = ts;
-      const pct = Math.min(1, (ts - start) / 1200);
-      fill.style.width = (pct*100) + '%';
-      if(pct < 1){ requestAnimationFrame(step); }
-      else {
-        const rows = state.history[filiale.id] || [];
-        const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
-
-        const hasActive = computeFilialeHasActiveAlarm(filiale.id);
-
-        let details = '';
-        if(last){
-          const rxRange = /Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i;
-          let min = isFinite(last.min) ? last.min : NaN;
-          let max = isFinite(last.max) ? last.max : NaN;
-          if(!isFinite(min) || !isFinite(max)){
-            const mr = (last.bodyPlain || last.body || '').match(rxRange);
-            if (mr){ min = toNumber(mr[1]); max = toNumber(mr[2]); }
-          }
-          const t = isFinite(last.temp) ? `${last.temp.toFixed(1)} °C` : '—';
-          const r = (isFinite(min) && isFinite(max)) ? `${min}–${max} °C` : '—';
-          details = ` · ${t} (range ${r})`;
-        }
-
-        if(hasActive){
-          status.innerHTML = `<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}${details}`;
-        } else {
-          status.innerHTML = `<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>${last ? ' · Ultimo: '+fmtDate(new Date(last.date)) : ''}${details}`;
-        }
-      }
-    }
-    requestAnimationFrame(step);
+  const wrap = $('#checkFilialiRows'); wrap.innerHTML = '';
+  (state.filiali||[]).forEach(filiale=>{
+    const row = el(`<div class="flex items-center justify-between text-sm">
+      <div class="w-56 truncate text-slate-300">${filiale.name}</div>
+      <div class="flex items-center gap-3">
+        <div class="text-xs text-slate-400" id="stat-${filiale.id}">—</div>
+      </div>
+    </div>`);
+    const rows = state.history[filiale.id] || [];
+    const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
+    const hasActive = computeFilialeHasActiveAlarm(filiale.id);
+    const txt = hasActive ? 'ALLARME' : 'OK';
+    const when = last ? ' · ' + fmtDate(new Date(last.date)) : '';
+    row.querySelector(`#stat-${filiale.id}`).innerHTML =
+      `<span class="px-2 py-0.5 rounded-md ${hasActive?'bg-red-500/15 text-red-300 border border-red-500/30':'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${txt}</span>${when}`;
+    wrap.appendChild(row);
   });
 }
-
 function uiRenderFilialiDesc(){
-  const wrap = $('#filialiDescWrap');
-  wrap.innerHTML = '';
-  state.filiali.forEach(filiale => {
+  const wrap = $('#filialiDescWrap'); wrap.innerHTML = '';
+  state.filiali.forEach(filiale=>{
     const rows = state.history[filiale.id] || [];
     const hasActive = computeFilialeHasActiveAlarm(filiale.id);
     const last = rows.length ? rows.slice().sort((a,b)=>b.date-a.date)[0] : null;
-
-    const card = el(`<div class="glass rounded-xl p-3 flex items-center gap-3 flex-wrap">
-      <div class="min-w-44 font-medium text-slate-200 flex-1 truncate">${filiale.name}</div>
-      <div class="${hasActive? 'px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30' : 'px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${hasActive?'ALLARME':'OK'}</div>
-      ${last? `<span class="ml-2 text-xs text-slate-400">${fmtDate(new Date(last.date))}</span>` : ''}
-      <div class="w-full sm:w-auto sm:ml-auto flex items-center gap-2 text-[12px]">
-        <span class="text-slate-400">ID:</span>
-        <button class="underline decoration-dotted" data-copy="${filiale.streamUser||''}">${filiale.streamUser||''}</button>
-        <span>·</span>
-        <span class="text-slate-400">Password:</span>
-        <button class="underline decoration-dotted" data-copy="${filiale.streamPass||''}">${filiale.streamPass||''}</button>
-        <button class="ml-3 px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
+    const card = el(`<div class="glass rounded-xl p-3">
+      <div class="flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-slate-200 truncate">${filiale.name}</div>
+          <div class="text-xs text-slate-400 mt-1">
+            Provider: <b>${filiale.provider==='vdo'?'VDO.Ninja':'ScreenStream (sito)'}</b>
+            · ID: <span class="font-mono">${filiale.streamUser||'—'}</span>
+            · Password: <span class="font-mono">${filiale.streamPass||'—'}</span>
+          </div>
+        </div>
+        <div>${hasActive
+          ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
+          : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>'}</div>
+        <button class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
       </div>
+      ${last? `<div class="text-xs text-slate-500 mt-1">Ultimo evento: ${fmtDate(new Date(last.date))}</div>`:''}
     </div>`);
     card.querySelector('[data-open-live]').addEventListener('click', ()=>{
       $('#filialeSelect').value = filiale.id;
-      applyLiveForCurrent();
+      startLiveForCurrent();
       document.getElementById('liveStreamBox')?.scrollIntoView({behavior:'smooth', block:'center'});
     });
     wrap.appendChild(card);
   });
-  bindCopyOnly();
 }
 
 /**************** POPUP DETTAGLI ****************/
@@ -448,7 +474,6 @@ function uiOpenRowDetails(row, filialeName){
 /**************** ROUTER & STATUS ****************/
 const routes = ['home','storico','impostazioni'];
 function setActiveTab(hash){ document.querySelectorAll('.tab-btn').forEach(b=>{ const r=b.getAttribute('data-route'); b.classList.toggle('active', r===hash); }); }
-
 function checkFilialiStatus(){
   const bar = $('#statusBar'); const badges = $('#statusBadges'); badges.innerHTML = '';
   const items = state.filiali.map(f=>{
@@ -464,13 +489,12 @@ function checkFilialiStatus(){
   });
   bar.classList.remove('hidden');
 }
-
 function go(route){
   routes.forEach(r=> document.getElementById('route-'+r).classList.toggle('hidden', r!==route));
   $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
   setActiveTab('#'+route);
   if(route==='storico') renderStorico();
-  if(route==='home'){ checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer(); updateLiveCredentialsBanner(); }
+  if(route==='home'){ checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer(); }
   if(route==='impostazioni') renderImpostazioni();
   history.replaceState(null, '', '#'+route);
 }
@@ -484,15 +508,21 @@ function renderImpostazioni(){
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-7 gap-3 items-end">
+      <div class="grid md:grid-cols-9 gap-3 items-end">
         <label class="block text-sm text-slate-300">Nome
           <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
         </label>
         <label class="block text-sm text-slate-300">Email storico
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
-        <label class="block text-sm text-slate-300">URL live
-          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||'https://screenstream.io/'}" placeholder="https://screenstream.io/" />
+        <label class="block text-sm text-slate-300">Provider
+          <select data-k="provider" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
+            <option ${f.provider==='vdo'?'selected':''} value="vdo">VDO.Ninja (iframe)</option>
+            <option ${f.provider==='ssite'?'selected':''} value="ssite">ScreenStream (sito esterno)</option>
+          </select>
+        </label>
+        <label class="block text-sm text-slate-300">URL (solo ScreenStream se necessario)
+          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://screenstream.io/" />
         </label>
         <label class="block text-sm text-slate-300">ID live
           <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
@@ -500,9 +530,14 @@ function renderImpostazioni(){
         <label class="block text-sm text-slate-300">Password live
           <input data-k="streamPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
         </label>
+        <label class="flex items-center gap-2 text-sm text-slate-300 mt-7">
+          <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
+          Audio (se supportato)
+        </label>
         <div class="flex gap-2 mt-7">
           <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri live</button>
-          <button data-act="join" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri screenstream.io</button>
+          <button data-act="site" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri sito live</button>
+          <button data-act="push" class="px-3 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-600">Apri link PUSH (telefono)</button>
         </div>
         <div class="flex gap-2 mt-7 justify-end">
           <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
@@ -514,25 +549,33 @@ function renderImpostazioni(){
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
       card.querySelectorAll('[data-k]').forEach(inp=>{
         const k = inp.dataset.k;
-        f[k] = inp.value;
+        if (inp.type==='checkbox') f[k] = inp.checked;
+        else f[k] = inp.value;
       });
-      saveState(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); updateLiveCredentialsBanner();
+      saveState(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
       alert('Salvato.');
     });
-
     card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
       if(!confirm('Eliminare la filiale?')) return;
       state.history[f.id] = [];
       state.filiali = state.filiali.filter(x=>x.id!==f.id);
-      saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); updateLiveCredentialsBanner();
+      saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
     });
-
     card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
-      $('#filialeSelect').value = f.id; applyLiveForCurrent(); go('home');
+      $('#filialeSelect').value = f.id; startLiveForCurrent(); go('home');
     });
-
-    card.querySelector('[data-act="join"]').addEventListener('click', ()=>{
-      window.open(f.streamUrl || 'https://screenstream.io/', '_blank', 'noopener');
+    card.querySelector('[data-act="site"]').addEventListener('click', ()=>{
+      if (f.provider==='vdo'){
+        window.open(buildVdoViewUrl(f.streamUser, f.streamPass, f.name), '_blank', 'noopener');
+      } else {
+        window.open(buildScreenStreamJoinUrl(f.streamUser, f.streamPass), '_blank', 'noopener');
+      }
+    });
+    card.querySelector('[data-act="push"]').addEventListener('click', ()=>{
+      const url = (f.provider==='vdo')
+        ? buildVdoPushUrl(f.streamUser, f.streamPass)
+        : buildScreenStreamJoinUrl(f.streamUser, f.streamPass);
+      window.open(url, '_blank', 'noopener');
     });
 
     list.appendChild(card);
@@ -543,38 +586,27 @@ function renderStorico(){
   const wrap = $('#storicoWrap'); wrap.innerHTML = '';
   for(const f of state.filiali){
     const rows = (state.history[f.id]||[]).slice().sort((a,b)=>b.date-a.date);
-    const openCount = (()=>{ // quanti allarmi ancora aperti
-      const lastByCell = new Map();
-      for(const r of rows.slice().reverse()){
-        const key = r.cellKey || statusCellKey(r.subject);
-        lastByCell.set(key, r.status);
-      }
-      let c=0; for(const st of lastByCell.values()){ if(st==='alto') c++; } return c;
-    })();
+    const openCount = (()=>{ const lastByCell=new Map(); for(const r of rows.slice().reverse()){ const key=r.cellKey||statusCellKey(r.subject); lastByCell.set(key,r.status); } let c=0; for(const st of lastByCell.values()){ if(st==='alto') c++; } return c; })();
     const section = el(`<div class="glass rounded-2xl p-5">
       <div class="flex items-center justify-between mb-3">
         <div class="font-medium">${f.name}</div>
         <div class="text-xs text-slate-400">${rows.length} eventi · ${openCount} allarmi aperti</div>
       </div>
       <div class="overflow-x-auto"><table class="min-w-full text-sm">
-        <thead class="text-slate-400">
-          <tr>
-            <th class="text-left py-2 pr-4">Data</th>
-            <th class="text-left py-2 pr-4">Stato</th>
-            <th class="text-left py-2 pr-4">Temperatura</th>
-            <th class="text-left py-2 pr-4">Range</th>
-            <th class="text-left py-2 pr-4">Cella/Descrizione</th>
-            <th class="text-left py-2 pr-4">Oggetto</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table></div></div>`);
+        <thead class="text-slate-400"><tr>
+          <th class="text-left py-2 pr-4">Data</th>
+          <th class="text-left py-2 pr-4">Stato</th>
+          <th class="text-left py-2 pr-4">Temperatura</th>
+          <th class="text-left py-2 pr-4">Range</th>
+          <th class="text-left py-2 pr-4">Cella/Descrizione</th>
+          <th class="text-left py-2 pr-4">Oggetto</th>
+        </tr></thead>
+        <tbody></tbody></table></div></div>`);
     const tbody = section.querySelector('tbody');
     rows.forEach(r=>{
       let cella=''; let subject=r.subject||''; let minmax='—';
       const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
-      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')';
-      else cella = subject;
+      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
       if (isFinite(r.min) && isFinite(r.max)) minmax = r.min + '–' + r.max + ' °C';
       const badge = (r.status==='alto')
         ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
@@ -594,51 +626,31 @@ function renderStorico(){
   }
 }
 
-/**************** ====== LIVE (screenstream.io) ====== ****************/
-function applyLiveForCurrent(){
-  const id = $('#filialeSelect').value;
-  const f = state.filiali.find(x=>x.id===id);
-  const iframe = $('#screenStreamFrame'); const none = $('#noStream'); const err = $('#errorBox');
-  err.textContent = '';
-  if(!f || !f.streamUrl){ none.classList.remove('hidden'); iframe.classList.add('hidden'); return; }
-  try{
-    iframe.src = f.streamUrl;
-    iframe.classList.remove('hidden');
-    none.classList.add('hidden');
-  }catch(e){
-    err.textContent = 'Impossibile caricare lo stream nel riquadro.';
-    iframe.classList.add('hidden'); none.classList.remove('hidden');
-  }
-  updateLiveCredentialsBanner();
-}
+/**************** ====== (solo se userai di nuovo WHEP) ====== ****************/
+/* Lasciamo gli stub per completezza: non usati con provider 'vdo' */
+async function startWhep(){ showError('WHEP disabilitato (usa provider VDO.Ninja).'); }
 
-/**************** ====== AUTH HELPERS (gapi + GIS) ====== ****************/
+/**************** AUTH (gapi + GIS) ****************/
 async function waitForGapiLoad(maxMs = 10000){
   const t0 = Date.now();
-  while (!window.gapi?.load) {
-    if (Date.now() - t0 > maxMs) throw new Error("gapi non caricato");
-    await new Promise(r => setTimeout(r, 50));
-  }
+  while (!window.gapi?.load) { if (Date.now() - t0 > maxMs) throw new Error("gapi non caricato"); await new Promise(r => setTimeout(r, 50)); }
 }
-
 async function initGapi(){
   await waitForGapiLoad();
   return new Promise((resolve, reject)=>{
     gapi.load('client', async ()=>{
       try{
         const opts = { discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"] };
-        if (window.cfg?.API_KEY) opts.apiKey = window.cfg.API_KEY; // opzionale
+        if (window.cfg?.API_KEY) opts.apiKey = window.cfg.API_KEY;
         await gapi.client.init(opts);
         resolve();
       }catch(e){ reject(e) }
     });
   });
 }
-
 function initGIS(){
-  // Blocca se manca il Client ID valido
   if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-    alert('Devi impostare il Google OAuth CLIENT_ID (tipo: xxxxx.apps.googleusercontent.com).');
+    alert('Devi impostare il Google OAuth CLIENT_ID.');
     openAdvancedModal();
     throw new Error('CLIENT_ID mancante');
   }
@@ -646,78 +658,26 @@ function initGIS(){
   window.tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: cfg.CLIENT_ID,
     scope: (cfg?.SCOPES || "https://www.googleapis.com/auth/gmail.readonly"),
-    callback: (resp)=>{
-      if (resp?.access_token){
-        gapi.client.setToken({ access_token: resp.access_token });
-        gmailReady = true;
-      }
-    }
+    hint: cfg.LOGIN_HINT || undefined,
+    callback: (resp)=>{ if (resp?.access_token){ gapi.client.setToken({ access_token: resp.access_token }); gmailReady = true; } }
   });
 }
-
-function signOut(){
-  try{
-    const tok = window.gapi?.client?.getToken?.();
-    if (tok?.access_token) {
-      window.google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{});
-    }
-    window.gapi?.client?.setToken?.(null);
-  }catch{}
-  gmailReady = false;
-}
-
+function signOut(){ try{ const tok = gapi?.client?.getToken?.(); if (tok?.access_token) google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{}); gapi?.client?.setToken?.(null);}catch{} gmailReady = false; }
 function signIn(){
   return new Promise( async (resolve, reject)=>{
     try{
       if (!window.gapi?.client) { await initGapi(); }
-      // se manca CLIENT_ID, apri subito il modal e interrompi
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-        alert('Inserisci prima il CLIENT_ID in Impostazioni avanzate.');
-        openAdvancedModal();
-        return reject(new Error('CLIENT_ID mancante'));
-      }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return reject(new Error('CLIENT_ID mancante')); }
       if (!window.tokenClient) { initGIS(); }
-
-      // popup neutro: niente auto-login, niente login_hint forzata
       try{ window.google?.accounts?.id?.disableAutoSelect?.(); }catch{}
-      try{
-        const tok = window.gapi?.client?.getToken?.();
-        if (tok?.access_token) window.google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{});
-        window.gapi?.client?.setToken?.(null);
-      }catch{}
-
+      try{ const tok = window.gapi?.client?.getToken?.(); if (tok?.access_token) window.google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{}); window.gapi?.client?.setToken?.(null);}catch{}
       window.tokenClient.callback = (r)=> r?.access_token ? resolve(r) : reject(r);
-      window.tokenClient.requestAccessToken({
-        prompt: 'consent select_account',
-        include_granted_scopes: false,
-        // se vuoi suggerire l'account (senza auto-selezionarlo), decommenta:
-        // hint: (cfg?.LOGIN_HINT || '')
-      });
+      window.tokenClient.requestAccessToken({ prompt: 'consent select_account', include_granted_scopes: false, hint: cfg.LOGIN_HINT || undefined });
     }catch(e){ reject(e); }
   });
 }
 
-async function forceAccountChooser(){
-  try{
-    if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-      openAdvancedModal();
-      return;
-    }
-    if (!window.gapi?.client) { await initGapi(); }
-    if (!window.tokenClient) { initGIS(); }
-    signOut();
-    await new Promise(r=>setTimeout(r,50));
-    await signIn();          // apre sempre il popup neutro
-    await fetchAlarms?.();   // ricarica storico
-    runCheckFiliali?.();     // aggiorna check
-    uiRenderFilialiDesc?.(); // aggiorna descrizioni
-  }catch(e){
-    alert('Errore login: ' + (e?.message || e));
-  }
-}
-/**************** ====== /AUTH HELPERS ====== ****************/
-
-/**************** GMAIL: parsing allarme/OK ****************/
+/**************** GMAIL: parsing (allarme ma temp nel range = OK) ****************/
 async function listMessages(q, max=200){ let msgs=[], pageToken; do{ const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken}); const d=res.result; if(d.messages) msgs.push(...d.messages); pageToken=d.nextPageToken } while(pageToken && msgs.length<max); return msgs }
 async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result }
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
@@ -737,12 +697,12 @@ function parseTemperatures(subject, body){
   return { temp, min, max };
 }
 
-function inferStatus(subject, body){
+function inferStatusSmart(subject, body){
   const txt = (subject + '\n' + body).toLowerCase();
-  const isAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(txt);
-  const isRestore = /(ripristin|rientrat|tornat|normalizzat|ritornat|ok|risolt|cleared|resolved)/.test(txt) && /temperatura|temp/.test(txt);
-  if(isRestore && !isAlarm) return 'ok';
-  if(isAlarm) return 'alto';
+  const saysAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(txt);
+  const saysRestore = /(ripristin|rientrat|tornat|normalizzat|ritornat|ok|risolt|cleared|resolved)/.test(txt) && /temperatura|temp/.test(txt);
+  if(saysRestore && !saysAlarm) return 'ok';
+  if(saysAlarm) return 'alto';
   return null;
 }
 
@@ -754,41 +714,37 @@ function extractCellAndFiliale(subject){
 
 async function fetchAlarms(){
   const q = cfg.GMAIL_QUERY;
-  const msgs = await listMessages(q, 500);
+  const msgs = await listMessages(q, 600);
   for(const m of msgs){
     const msg = await getMessage(m.id);
     const subject = getHeader(msg,'Subject')||'(senza oggetto)';
     const d = new Date(Number(msg.internalDate));
-    let body='';
-    (function extract(part){
-      if(!part) return;
+    let body=''; (function extract(part){ if(!part) return;
       if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; }
       if(part.parts) part.parts.forEach(extract);
       if(part.mimeType==='text/html' && !body && part.body?.data){ body = decodeBody(part.body.data).replace(/<[^>]+>/g,' '); }
     })(msg.payload);
 
-    let status = inferStatus(subject, body);
+    let status = inferStatusSmart(subject, body);
     if(!status) continue;
 
     const { temp, min, max } = parseTemperatures(subject, body);
-    // *** REGOLA RICHIESTA: se allarme ma temp dentro il range => OK
-    if (status === 'alto' && isFinite(temp) && isFinite(min) && isFinite(max) && temp >= min && temp <= max) {
+
+    // Se è stato segnalato come allarme ma la temperatura è nel range -> OK (false positive)
+    if(status==='alto' && isFinite(temp) && isFinite(min) && isFinite(max) && temp>=min && temp<=max){
       status = 'ok';
     }
 
     const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
     const low = (subject+'\n'+body).toLowerCase();
 
-    // trova filiale id
     const fid = (function(){
       if(filialeName){
         const needle = filialeName.toLowerCase();
         const byHint = state.filiali.find(f => f.name.toLowerCase().includes(needle));
         if(byHint) return byHint.id;
       }
-      for(const f of state.filiali){
-        if(low.includes(f.name.toLowerCase())) return f.id;
-      }
+      for(const f of state.filiali){ if(low.includes(f.name.toLowerCase())) return f.id; }
       return $('#filialeSelect').value || state.filiali[0]?.id;
     })();
 
@@ -799,7 +755,6 @@ async function fetchAlarms(){
     if(!state.history[fid]) state.history[fid]=[];
     if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
   }
-  // mantieni dimensione e ordina
   for(const fid of Object.keys(state.history)){
     state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000);
   }
@@ -813,7 +768,7 @@ function openAdvancedModal() {
   const modal = $('#advModal'); const gate = $('#advGate'); const body = $('#advBody');
   if (!modal || !gate || !body) return;
   modal.classList.add('show'); gate.classList.remove('hidden'); body.classList.add('hidden');
-  const o = $('#originsHint'); if (o) o.textContent = location.origin;
+  const host = location.host; $('#originsHint').textContent = `https://${host}`;
   $('#advClientId').value = cfg?.CLIENT_ID || '';
   $('#advApiKey').value = cfg?.API_KEY || '';
   $('#advGmailQuery').value = cfg?.GMAIL_QUERY || '';
@@ -831,23 +786,23 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   document.querySelectorAll('.route-btn').forEach(b=> b.addEventListener('click', ()=> go(b.dataset.route.slice(1))));
   const initial = (location.hash || '#home'); setActiveTab(initial); go((initial||'#home').slice(1));
 
-  $('#filialeSelect').addEventListener('change', ()=>{ applyLiveForCurrent(); });
-
+  $('#filialeSelect').addEventListener('change', ()=> startLiveForCurrent());
   if (state.filiali[0]) $('#filialeSelect').value = state.filiali[0].id;
 
   checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
-  updateLiveCredentialsBanner();
 
   // LIVE controls
-  $('#btnReloadLive').addEventListener('click', ()=>{
-    const fr = $('#screenStreamFrame');
-    if(fr){ fr.src = fr.src; }
-  });
-  $('#btnOpenSS').addEventListener('click', ()=>{
+  $('#btnReconnect').addEventListener('click', ()=> startLiveForCurrent());
+  $('#btnOpenProvider').addEventListener('click', ()=>{
     const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
-    const url = f?.streamUrl || 'https://screenstream.io/';
+    if(!f) return;
+    const url = (f.provider==='vdo')
+      ? buildVdoViewUrl(f.streamUser, f.streamPass, f.name)
+      : buildScreenStreamJoinUrl(f.streamUser, f.streamPass);
     window.open(url,'_blank','noopener');
   });
+  $('#btnCopySid').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); copyTxt(f?.streamUser||''); });
+  $('#btnCopyPwd').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); copyTxt(f?.streamPass||''); });
 
   // Profilo & filiali
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
@@ -856,9 +811,11 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       id: (crypto?.randomUUID?.() || ('f'+Date.now())),
       name: 'Nuova filiale',
       email: 'allarmi@edilrepairs.ch',
-      streamUrl: 'https://screenstream.io/',
+      provider: 'vdo',
+      streamUrl: '',
       streamUser: '',
-      streamPass: ''
+      streamPass: '',
+      streamAudio: false
     });
     saveState(); renderImpostazioni(); populateFilialeSelect();
   });
@@ -875,17 +832,28 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     cfg.LOGIN_HINT = $('#advLoginHint').value.trim();
     cfg.SCOPES     = $('#advScopes').value.trim() || DEFAULTS.SCOPES;
     saveState();
-    initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); if (cfg.CLIENT_ID && cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { $('#advModal')?.classList.remove('show'); } }).catch(e=> alert('Errore init: ' + (e?.message || e)));
+    initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e)));
+    $('#advModal')?.classList.remove('show');
   };
   $('#advTest').onclick = async ()=>{ try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); } };
   $('#advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
 
-  // Auth buttons
-  document.getElementById('btnSignIn').onclick = forceAccountChooser;
-  document.getElementById('btnChangeAccount').onclick = forceAccountChooser;
+  async function forceAccountChooser(){
+    try{
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
+      if (!window.gapi?.client) { await initGapi(); }
+      if (!window.tokenClient) { initGIS(); }
+      signOut(); await new Promise(r=>setTimeout(r,50)); await signIn(); await fetchAlarms();
+    }catch(e){ alert('Errore login: ' + (e?.message || e)); }
+  }
+  $('#btnSignIn').onclick = forceAccountChooser;
+  $('#btnChangeAccount').onclick = forceAccountChooser;
 
-  // avvia live per la filiale corrente
-  applyLiveForCurrent();
+  // avvia live
+  startLiveForCurrent();
+
+  // cleanup (se un domani userai WHEP)
+  window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); });
 });
 </script>
 </body>
