@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Resinelli Monitor</title>
-  <!-- Tailwind (CDN) -->
+  <!-- Tailwind (CDN) - in produzione usa build CLI/PostCSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Identity Services (OAuth modern) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -103,17 +103,20 @@
       <div class="grid md:grid-cols-[minmax(360px,760px),1fr] gap-6">
         <!-- LIVE -->
         <div class="stream-outer">
-          <div class="mb-2">
-            <label class="block text-xs text-slate-400 mb-1">Dimensione schermo LIVE</label>
-            <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
+          <div class="mb-2 flex items-center gap-3">
+            <div class="flex-1">
+              <label class="block text-xs text-slate-400 mb-1">Dimensione schermo LIVE</label>
+              <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
+            </div>
+            <button id="btnReconnect" class="mt-6 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Riconnetti</button>
+            <a href="https://screenstream.io/" target="_blank" rel="noopener" class="mt-6 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600">Apri screenstream.io</a>
           </div>
           <div class="stream-box" id="liveStreamBox">
-            <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessun URL stream configurato</div>
-            <iframe id="phoneIframe" class="hidden stream-media" referrerpolicy="no-referrer" loading="lazy"></iframe>
-            <img id="phoneMjpeg" class="hidden stream-media" alt="Anteprima MJPEG" />
+            <div id="statusBox" class="absolute left-0 right-0 top-0 p-2 text-center text-xs text-slate-300"></div>
+            <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessuna live avviata</div>
             <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
 
-            <!-- === Viewer LAN in-box (popup nello stesso riquadro) === -->
+            <!-- === Viewer LAN (resta disponibile se mai ti dovesse servire) === -->
             <div id="lanOverlay">
               <div id="lanToolbar">
                 <div class="text-xs text-slate-300 truncate">
@@ -140,15 +143,20 @@
             </div>
             <!-- === /Viewer LAN === -->
           </div>
+          <div id="errorBox" class="text-xs text-rose-300 min-h-5"></div>
         </div>
 
-        <!-- Check + descrizioni -->
+        <!-- Pannello destro: Check + filiali con “Apri live” -->
         <div class="flex flex-col gap-6">
           <div id="checkFilialiPanel" class="glass rounded-2xl p-5 space-y-3">
             <div class="font-medium tracking-wide mb-2">Check filiali</div>
             <div id="checkFilialiRows" class="space-y-2"></div>
           </div>
-          <div id="filialiDescWrap" class="space-y-2"></div>
+
+          <div class="glass rounded-2xl p-5 space-y-3">
+            <div class="font-medium tracking-wide mb-2">Filiali & stato</div>
+            <div id="filialiDescWrap" class="space-y-2"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -167,12 +175,16 @@
         </div>
       </div>
 
+      <!-- Impostazioni Filiali – forzato screenstream (solo ID e Password) -->
       <div class="glass rounded-2xl p-5">
         <div class="flex items-center justify-between">
           <div class="font-medium">Filiali</div>
           <button id="btnAddFiliale" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Aggiungi filiale</button>
         </div>
         <div id="filialiList" class="mt-4 space-y-3"></div>
+        <div class="mt-2 text-xs text-slate-400">
+          Streaming forzato: <b>WebRTC (WHEP) via screenstream.io</b>. Endpoint: <code>https://screenstream.io/whep/&lt;ID&gt;</code>
+        </div>
       </div>
 
       <div class="text-xs text-slate-500">Le impostazioni sono salvate nel tuo browser (LocalStorage).</div>
@@ -219,8 +231,8 @@
         <div class="text-xs text-slate-400">Origin da inserire nel Client OAuth (GitHub Pages): <code id="originsHint"></code></div>
         <div class="flex flex-wrap gap-2 justify-end">
           <button id="advTest"  class="px-3 py-2 rounded-lg bg-blue-500/90 hover:bg-blue-500 transition">Test accesso</button>
-          <button id="advSave"  class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 transition">Salva</button>
-          <button id="advReset" class="px-3 py-2 rounded-lg bg-red-700/80 hover:bg-red-600/80 transition">Reset LocalStorage</button>
+          <button id="advSave"  class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
+          <button id="advReset" class="px-3 py-2 rounded-lg bg-red-700/80 hover:bg-red-600/80">Reset LocalStorage</button>
         </div>
       </div>
     </div>
@@ -242,19 +254,23 @@ const DEFAULTS = {
   LOGIN_HINT: ""
 };
 
-/** Endpoint del tuo Worker WHEP (se lo usi) **/
-const WORKER_WHEP = 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep';
+/** Forzatura screenstream.io (WHEP) **/
+const SCREENSTREAM_ID   = "72500366";
+const SCREENSTREAM_PASS = "LtTc05";
+const WHEP_DIRECT = `https://screenstream.io/whep/${SCREENSTREAM_ID}`;
+const WHEP_WORKER = "https://edilrepairstechnology.resinellialimentari.workers.dev/whep"; // fallback
+const AUTH_BASIC  = "Basic " + btoa(SCREENSTREAM_ID + ":" + SCREENSTREAM_PASS);
 
 /**************** STATO ****************/
 let cfg = {};
 let tokenClient;
 let gmailReady = false;
 
-// Default filiali
+// Default filiali (il live è lo stesso per tutte: screenstream.io con ID fissato)
 const DEFAULT_FILIALI = [
-  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
-  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
-  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
+  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch' },
+  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch' },
+  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch' },
 ];
 let state = { username: '', filiali: [], history: {} };
 
@@ -262,13 +278,6 @@ function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
   state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
-  state.filiali.forEach(f=>{
-    if(!f.streamUrl) f.streamUrl = WORKER_WHEP;
-    if(typeof f.streamUser!=='string') f.streamUser='';
-    if(typeof f.streamPass!=='string') f.streamPass='';
-    if(!f.streamMode) f.streamMode='webrtc';
-    if(typeof f.streamAudio!=='boolean') f.streamAudio=false;
-  });
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
 }
@@ -283,10 +292,6 @@ function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium',
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
 function isInsecureOnHttps(u){ try{ const p = new URL(u, location.href); return location.protocol==='https:' && p.protocol==='http:'; } catch{ return false; } }
 function normalizeText(s){ return (s||'').replace(/[–—−]/g,'-').replace(/\s+/g,' ').trim(); }
-function buildStreamUrlWithCreds(base, user, pass){
-  if(!base) return '';
-  try{ const u=new URL(base, location.href); if(user) u.username=user; if(pass) u.password=pass; return u.toString(); }catch{ return base; }
-}
 
 /*********** LIVE height ***********/
 function uiBindLiveSizer() {
@@ -303,7 +308,7 @@ function uiBindLiveSizer() {
   });
 }
 
-/**************** “Viewer LAN” (popup nel riquadro) ****************/
+/**************** “Viewer LAN” (manteniamo se mai servisse) ****************/
 function openLanOverlay(url){
   const overlay = $('#lanOverlay');
   const frame = $('#lanFrame');
@@ -316,21 +321,12 @@ function openLanOverlay(url){
   blocked.classList.remove('show');
   frame.removeAttribute('src'); // reset
 
-  // Prova a caricare dentro l'iframe
-  // Se Mixed Content, il browser lo blocca e l'onload non scatterà: mostriamo il messaggio dopo un piccolo timeout
   let loaded = false;
   frame.onload = () => { loaded = true; blocked.classList.remove('show'); };
-  // NB: niente 'sandbox' per non complicare l'embed; è comunque cross-origin.
   frame.src = url;
 
-  setTimeout(()=>{
-    if(!loaded){
-      // quasi sicuramente Mixed Content bloccato
-      blocked.classList.add('show');
-    }
-  }, 900);
+  setTimeout(()=>{ if(!loaded){ blocked.classList.add('show'); } }, 900);
 
-  // Toolbar buttons
   const openExt = $('#lanExternal'), openExt2 = $('#lanOpenExternal2');
   const replace = $('#lanReplace'), replace2 = $('#lanReplace2');
   const closeBtn = $('#lanClose');
@@ -351,14 +347,11 @@ function openLanOverlay(url){
   replace?.addEventListener('click', replaceHere, {once:true});
   replace2?.addEventListener('click', replaceHere, {once:true});
 
-  closeBtn?.addEventListener('click', ()=>{
-    frame.removeAttribute('src');
-    overlay.classList.remove('show');
-  }, {once:true});
+  closeBtn?.addEventListener('click', ()=>{ frame.removeAttribute('src'); overlay.classList.remove('show'); }, {once:true});
 }
 
-/**************** CHECK/UX, STORICO (come prima) ****************/
-function runCheckFiliali(){ /* identico a prima, per brevità è invariato */ 
+/**************** CHECK FILIALI UX ****************/
+function runCheckFiliali() {
   const rowsWrap = document.getElementById('checkFilialiRows');
   rowsWrap.innerHTML = '';
   (state.filiali || []).forEach(filiale => {
@@ -414,29 +407,51 @@ function runCheckFiliali(){ /* identico a prima, per brevità è invariato */
   });
 }
 
-function uiRenderFilialiDesc(){ /* invariato come prima */ 
-  const wrap = $('#filialiDescWrap'); wrap.innerHTML = '';
+/**************** DESCRIZIONE PER FILIALE (Home) + pulsante “Apri live” ****************/
+function uiRenderFilialiDesc() {
+  const wrap = $('#filialiDescWrap');
+  wrap.innerHTML = '';
   state.filiali.forEach(filiale => {
     const rows = state.history[filiale.id] || [];
     const hasAlarm = rows.some(r => r.status === 'alto');
     const last = rows.length ? rows.slice().sort((a,b)=>b.date-a.date)[0] : null;
+
     const card = el(`<div class="glass rounded-xl p-3 flex items-center gap-3">
-      <span class="font-medium text-slate-200 flex-1">${filiale.name}</span>
+      <span class="font-medium text-slate-200 flex-1 truncate">${filiale.name}</span>
       <span class="${hasAlarm? 'px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30 cursor-pointer' : 'px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${hasAlarm?'ALLARME':'OK'}</span>
-      ${last? `<span class="ml-2 text-xs text-slate-400">${fmtDate(new Date(last.date))}</span>` : ''}
+      ${last? `<span class="hidden sm:inline ml-2 text-xs text-slate-400">${fmtDate(new Date(last.date))}</span>` : ''}
+      <button class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
     </div>`);
-    if(hasAlarm){ card.querySelector('span:nth-child(2)').onclick = ()=> last && uiOpenRowDetails(last, filiale.name); card.querySelector('span:nth-child(2)').title = 'Clicca per dettagli'; }
+    if(hasAlarm){
+      card.querySelector('span:nth-child(2)').onclick = ()=> last && uiOpenRowDetails(last, filiale.name);
+      card.querySelector('span:nth-child(2)').title = 'Clicca per dettagli';
+    }
+    card.querySelector('[data-open-live]')?.addEventListener('click', ()=>{
+      // seleziona filiale e avvia la live (stesso stream screenstream)
+      $('#filialeSelect').value = filiale.id;
+      startWhepPreferred();
+      // scroll verso il player
+      document.getElementById('liveStreamBox')?.scrollIntoView({behavior:'smooth', block:'center'});
+    });
     wrap.appendChild(card);
   });
 }
 
-function uiOpenRowDetails(row, filialeName){ /* invariato come prima */ 
-  const modal = $('#rowModal'); const body = $('#rowModalBody');
-  let cella = ''; let filiale = filialeName || ''; let subject = row.subject || '';
-  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—'; let minmax = '—';
+/**************** POPUP DETTAGLI ****************/
+function uiOpenRowDetails(row, filialeName) {
+  const modal = $('#rowModal');
+  const body = $('#rowModalBody');
+
+  let cella = '';
+  let filiale = filialeName || '';
+  let subject = row.subject || '';
+  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—';
+  let minmax = '—';
+
   const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
   if (m) { cella = m[1].trim(); filiale = m[2].trim(); } else { cella = subject; }
   if (isFinite(row.min) && isFinite(row.max)) { minmax = row.min + '–' + row.max + ' °C'; }
+
   body.innerHTML = `
     <div class="mb-2 text-lg font-semibold">${cella}</div>
     <div class="mb-2 text-sm text-slate-400">Filiale: <span class="font-medium text-slate-200">${filiale}</span></div>
@@ -451,9 +466,14 @@ function uiOpenRowDetails(row, filialeName){ /* invariato come prima */
   modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
 }
 
-/**************** ROUTER & STATUS ****************/
+/**************** ROUTER ****************/
 const routes = ['home','storico','impostazioni'];
-function setActiveTab(hash){ document.querySelectorAll('.tab-btn').forEach(b=>{ const r=b.getAttribute('data-route'); b.classList.toggle('active', r===hash); }); }
+function setActiveTab(hash){
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    const r=b.getAttribute('data-route');
+    b.classList.toggle('active', r===hash);
+  });
+}
 function go(route){
   routes.forEach(r=> document.getElementById('route-'+r).classList.toggle('hidden', r!==route));
   $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
@@ -463,13 +483,20 @@ function go(route){
   if(route==='impostazioni') renderImpostazioni();
   history.replaceState(null, '', '#'+route);
 }
-window.addEventListener('hashchange', ()=>{ const r = (location.hash||'#home').slice(1); if(routes.includes(r)) go(r); });
+window.addEventListener('hashchange', ()=>{
+  const r = (location.hash||'#home').slice(1);
+  if(routes.includes(r)) go(r);
+});
 
+/**************** STATUS BAR (globale) ****************/
 function checkFilialiStatus(){
-  const bar = $('#statusBar'); const badges = $('#statusBadges'); badges.innerHTML = '';
+  const bar = $('#statusBar'); const badges = $('#statusBadges');
+  badges.innerHTML = '';
   const items = state.filiali.map(f=>{
-    const rows = (state.history[f.id]||[]); const last = rows.slice().sort((a,b)=>b.date-a.date)[0];
-    const isAlarm = !!rows.find(r=>r.status==='alto'); return { name:f.name, last, isAlarm };
+    const rows = (state.history[f.id]||[]);
+    const last = rows.slice().sort((a,b)=>b.date-a.date)[0];
+    const isAlarm = !!rows.find(r=>r.status==='alto');
+    return { name:f.name, last, isAlarm };
   });
   if(!items.length){ bar.classList.add('hidden'); return }
   items.forEach(it=>{
@@ -480,47 +507,42 @@ function checkFilialiStatus(){
 }
 
 /**************** IMPOSTAZIONI & STORICO ****************/
-function populateFilialeSelect(){ const sel = $('#filialeSelect'); sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join(''); }
+function populateFilialeSelect(){
+  const sel = $('#filialeSelect');
+  sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+}
 
 function renderImpostazioni(){
   $('#usernameInput').value = state.username || '';
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-7 gap-3 items-end">
+      <div class="grid md:grid-cols-6 gap-3 items-end">
         <label class="block text-sm text-slate-300">Nome
           <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
         </label>
         <label class="block text-sm text-slate-300">Email storico
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
-        <label class="block text-sm text-slate-300">URL stream
-          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://<worker>/whep oppure http://192.168.x.x:8080" />
+        <label class="block text-sm text-slate-300">ID stream (forzato)
+          <input class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${SCREENSTREAM_ID}" disabled />
         </label>
-        <label class="block text-sm text-slate-300">ID stream
-          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" placeholder="(se richiesto)" />
+        <label class="block text-sm text-slate-300">Password stream
+          <input type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${SCREENSTREAM_PASS}" disabled />
         </label>
-        <label class="block text-sm text-slate-300">Password
-          <input data-k="streamPass" type="password" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" placeholder="(se richiesto)" />
-        </label>
-        <label class="block text-sm text-slate-300">Modalità
-          <select data-k="streamMode" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
-            <option ${f.streamMode==='webrtc'?'selected':''} value="webrtc">WebRTC (WHEP)</option>
-            <option ${f.streamMode==='iframe'?'selected':''} value="iframe">Iframe</option>
-            <option ${f.streamMode==='mjpeg'?'selected':''} value="mjpeg">MJPEG</option>
-          </select>
-        </label>
-        <label class="flex items-center gap-2 text-sm text-slate-300 mt-7">
-          <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
-          Audio (WebRTC)
-        </label>
+        <div class="text-sm text-slate-300">
+          Modalità
+          <div class="mt-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10">WebRTC (WHEP) — screenstream.io</div>
+        </div>
+        <div class="flex items-end">
+          <button data-act="open" class="w-full px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Apri sito</button>
+        </div>
       </div>
       <div class="mt-3 flex flex-wrap justify-between gap-2">
         <div class="text-[11px] text-slate-400">
-          Se l’URL è <b>HTTP</b> e questa pagina è <b>HTTPS</b>, l’embed sarà bloccato. Usa il pulsante nel riquadro LIVE per il Viewer LAN.
+          L’endpoint è <code>https://screenstream.io/whep/${SCREENSTREAM_ID}</code>. L’embed è tramite WebRTC con Basic Auth.
         </div>
         <div class="flex gap-2">
-          <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri stream</button>
           <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
           <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
         </div>
@@ -528,11 +550,9 @@ function renderImpostazioni(){
     </div>`);
 
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
-      card.querySelectorAll('input,select').forEach(inp=>{
-        if (inp.type==='checkbox') f[inp.dataset.k] = inp.checked;
-        else f[inp.dataset.k] = inp.value;
-      });
-      saveState(); populateFilialeSelect(); applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
+      card.querySelectorAll('input[data-k]').forEach(inp=>{ f[inp.dataset.k] = inp.value; });
+      saveState(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
+      alert('Impostazioni salvate.');
     });
     card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
       state.history[f.id] = [];
@@ -540,8 +560,7 @@ function renderImpostazioni(){
       saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
     });
     card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
-      const url = buildStreamUrlWithCreds(f.streamUrl, f.streamUser, f.streamPass);
-      if(url) window.open(url, '_blank', 'noopener');
+      window.open('https://screenstream.io/', '_blank', 'noopener');
     });
 
     list.appendChild(card);
@@ -588,8 +607,11 @@ function renderStorico(){
   }
 }
 
-/**************** ====== STREAM (WebRTC WHEP + fallback + Viewer LAN) ====== ****************/
+/**************** ====== STREAM (WebRTC WHEP forzato) ====== ****************/
 let webrtcSession = null;
+
+function setStatus(msg){ const el=$('#statusBox'); if(el){ el.textContent = msg || ""; } }
+function showError(msg){ $('#errorBox').textContent = msg || ""; }
 
 function cleanupWebRTC(){
   try{
@@ -602,50 +624,31 @@ function cleanupWebRTC(){
   }catch{}
   webrtcSession = null;
 }
+
 async function stopWhepResource(){
   if(webrtcSession?.resourceUrl){
-    try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{}
+    try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors' }); }catch{}
   }
 }
-function extractCredsFromUrl(u){
-  try{
-    const url = new URL(u, location.href);
-    const user = url.username || '';
-    const pass = url.password || '';
-    url.username = ''; url.password = '';
-    return { user, pass, sanitized: url.toString() };
-  }catch{ return { user:'', pass:'', sanitized:u || '' }; }
-}
-function makeBasicAuthHeaders(user, pass){
-  if(!user && !pass) return {};
-  const token = btoa(`${user||''}:${pass||''}`);
-  return { 'Authorization': `Basic ${token}` };
-}
-async function startWhep(finalUrl, withAudio, extraHeaders = {}){
+
+async function startWhepAt(url, withAudio=false){
   const video = $('#webrtcVideo');
-  const none = $('#noStream');
+  const none  = $('#noStream');
+  const status= (txt)=>{ try{ const host = new URL(url).host; setStatus(`[${host}] ${txt}`); }catch{ setStatus(txt); } };
+
+  showError("");
+  status("invio SDP offer…");
+
   video.classList.remove('hidden');
   video.muted = !withAudio;
   video.playsInline = true;
 
   const pc = new RTCPeerConnection({ iceServers: [{urls:'stun:stun.l.google.com:19302'}] });
-
-  const onError = (msg) => {
-    none.classList.remove('hidden');
-    none.innerHTML = `
-      <div class="space-y-2 text-center">
-        <div class="text-slate-300 text-sm">${msg}</div>
-        <a href="${finalUrl}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova scheda</a>
-      </div>`;
-    video.classList.add('hidden');
-    cleanupWebRTC();
-  };
-
   pc.addTransceiver('video', {direction:'recvonly'});
   if(withAudio) pc.addTransceiver('audio', {direction:'recvonly'});
 
   pc.ontrack = (ev) => {
-    const [stream] = ev.streams;
+    const [stream] = ev.streams || [];
     if (stream) {
       video.srcObject = stream;
       video.play().catch(()=>{});
@@ -657,96 +660,76 @@ async function startWhep(finalUrl, withAudio, extraHeaders = {}){
 
   let res;
   try{
-    res = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type':'application/sdp', ...extraHeaders }, body: offer.sdp, mode: 'cors' });
-  }catch(e){ onError('Connessione WHEP non raggiungibile (CORS/HTTPS).'); throw e; }
-  if(!res.ok){ onError('Il server WHEP ha rifiutato la richiesta ('+res.status+').'); return; }
+    res = await fetch(url, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/sdp',
+        'Authorization': AUTH_BASIC
+      },
+      body: offer.sdp,
+      credentials: 'omit',
+    });
+  }catch(e){
+    showError(`Errore rete/CORS verso ${url}`);
+    status("errore rete/CORS");
+    $('#webrtcVideo').classList.add('hidden');
+    $('#noStream').classList.remove('hidden');
+    cleanupWebRTC();
+    return false;
+  }
 
-  const answerSdp = await res.text();
-  const resourceUrl = res.headers.get('Location');
-  await pc.setRemoteDescription({type:'answer', sdp:answerSdp});
-  webrtcSession = { pc, resourceUrl, videoEl: video, authHeaders: extraHeaders };
+  if(!res.ok){
+    showError(`Risposta ${res.status} da ${url}`);
+    status(`HTTP ${res.status}`);
+    $('#webrtcVideo').classList.add('hidden');
+    $('#noStream').classList.remove('hidden');
+    cleanupWebRTC();
+    return false;
+  }
+
+  const answerSdp  = await res.text();
+  const resourceUrl= res.headers.get('Location') || null;
+
+  try{
+    await pc.setRemoteDescription({type:'answer', sdp:answerSdp});
+  }catch(e){
+    showError(`SDP answer non valida (${e?.message || e})`);
+    status("answer non valida");
+    $('#webrtcVideo').classList.add('hidden');
+    $('#noStream').classList.remove('hidden');
+    cleanupWebRTC();
+    return false;
+  }
+
+  webrtcSession = { pc, resourceUrl, videoEl: $('#webrtcVideo') };
+  $('#noStream').classList.add('hidden');
+  status("connesso");
+  return true;
 }
 
-function applyStreamForCurrent(){
-  const id = $('#filialeSelect').value; const f = state.filiali.find(x=>x.id===id);
-  const iframe = $('#phoneIframe'); const img = $('#phoneMjpeg'); const none = $('#noStream'); const video = $('#webrtcVideo'); const liveBox = $('#liveStreamBox');
+async function startWhepPreferred(){
+  setStatus("preparo connessione…");
+  $('#noStream').classList.remove('hidden');
+  $('#webrtcVideo').classList.add('hidden');
 
-  // chiudi overlay LAN
-  $('#lanOverlay')?.classList.remove('show');
-  $('#lanFrame')?.removeAttribute('src');
+  await stopWhepResource();
+  cleanupWebRTC();
 
-  stopWhepResource().finally(cleanupWebRTC);
+  // 1) Diretto screenstream.io
+  const okDirect = await startWhepAt(WHEP_DIRECT, false);
+  if(okDirect) return;
 
-  iframe.classList.add('hidden'); img.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden');
-  none.innerHTML = 'Nessun URL stream configurato';
-  liveBox.querySelector('.mixed-content-badge')?.remove();
-  liveBox.querySelector('.auth-badge')?.remove();
-
-  if(!f?.streamUrl) return;
-
-  const parsed = extractCredsFromUrl(f.streamUrl);
-  const user = (f.streamUser || parsed.user || '').trim();
-  const pass = (f.streamPass || parsed.pass || '').trim();
-  const bareUrl = parsed.sanitized;
-
-  const mode = f.streamMode || 'webrtc';
-  none.classList.add('hidden');
-
-  // === Caso LAN HTTP su pagina HTTPS → usa Viewer LAN nel riquadro ===
-  const isMixed = isInsecureOnHttps(bareUrl);
-  if(isMixed){
-    none.classList.remove('hidden');
-    none.innerHTML = `
-      <div class="space-y-2 text-center">
-        <div class="text-slate-300 text-sm">Lo stream è <b>HTTP</b> e la pagina è <b>HTTPS</b>: incorporamento bloccato dal browser.</div>
-        <div class="text-xs text-slate-400">Puoi usare il <b>Viewer LAN</b> nel riquadro o aprire lo stream in una nuova finestra.</div>
-        <div class="mt-2 flex items-center justify-center gap-2">
-          <button id="btnLanInBox" class="px-3 py-1.5 rounded bg-emerald-600/90 hover:bg-emerald-600 text-xs">Apri nella finestra LIVE</button>
-          <a href="${bareUrl}" target="_blank" rel="noopener" class="inline-block px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri in nuova finestra</a>
-        </div>
-      </div>`;
-    $('#btnLanInBox')?.addEventListener('click', ()=> openLanOverlay(bareUrl));
-    // Badge informativo
-    const badgeDiv = document.createElement('div');
-    badgeDiv.className = "mixed-content-badge absolute top-2 right-2 px-2 py-0.5 rounded bg-amber-500/80 text-amber-900 text-xs font-semibold shadow";
-    badgeDiv.textContent = "⚠ Mixed content";
-    liveBox.appendChild(badgeDiv);
-    return;
+  // 2) Worker (fallback) se impostato
+  if(WHEP_WORKER){
+    await stopWhepResource(); cleanupWebRTC();
+    const okWorker = await startWhepAt(WHEP_WORKER, false);
+    if(okWorker) return;
   }
 
-  // === Modalità standard ===
-  if(mode==='webrtc'){
-    let authHeaders = {};
-    try { const host = new URL(bareUrl).host; if (!/\.workers\.dev$/i.test(host)) authHeaders = makeBasicAuthHeaders(user, pass); } catch {}
-    if ((user||pass) && Object.keys(authHeaders).length){
-      const b = document.createElement('div');
-      b.className = "auth-badge absolute top-2 left-2 badge bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
-      b.textContent = "🔒 HTTPS + Auth";
-      liveBox.appendChild(b);
-    }
-    startWhep(bareUrl, !!f.streamAudio, authHeaders).catch(()=>{});
-    return;
-  }
-
-  const urlForEmbed = buildStreamUrlWithCreds(bareUrl, user, pass);
-
-  if(mode==='iframe'){
-    iframe.src = urlForEmbed;
-    iframe.classList.remove('hidden');
-    setTimeout(()=>{
-      if(iframe.contentWindow === null){
-        none.classList.remove('hidden');
-        none.innerHTML = `
-          <div class="space-y-2 text-center">
-            <div class="text-slate-300 text-sm">Lo stream potrebbe essere bloccato dall’host (X-Frame-Options/Frame-Ancestors).</div>
-            <a href="${urlForEmbed}" target="_blank" rel="noopener" class="inline-block mt-2 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">Apri stream in nuova finestra</a>
-          </div>`;
-      }
-    }, 2000);
-  } else { // mjpeg
-    img.src = urlForEmbed;
-    img.classList.remove('hidden');
-  }
+  // Messaggio finale se tutto fallisce
+  $('#noStream').classList.remove('hidden');
+  showError("Impossibile stabilire la connessione WebRTC. Verifica CORS o credenziali.");
 }
 
 /**************** AUTH (gapi + GIS) ****************/
@@ -798,45 +781,90 @@ function signIn(){
   });
 }
 
-/**************** GMAIL (parsing) ****************/
+/**************** GMAIL (parsing robusto) ****************/
 async function listMessages(q, max=200){ let msgs=[], pageToken; do{ const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken}); const d=res.result; if(d.messages) msgs.push(...d.messages); pageToken=d.nextPageToken } while(pageToken && msgs.length<max); return msgs }
 async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result }
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
 function getHeader(msg, name){ const h = msg.payload.headers.find(h=>h.name.toLowerCase()===name.toLowerCase()); return h? h.value: '' }
+
 function parseTemperatures(subject, body){
-  const s = normalizeText(subject); const b = normalizeText(body);
-  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i) || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
+  const s = normalizeText(subject);
+  const b = normalizeText(body);
+
+  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i)
+              || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
+
   const mRange = b.match(/Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i);
-  let temp = mTemp ? toNumber(mTemp[1]) : NaN; const min = mRange ? toNumber(mRange[1]) : NaN; const max = mRange ? toNumber(mRange[2]) : NaN;
-  if(!isFinite(temp)){ const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i); if (near) temp = toNumber(near[1]); }
+
+  let temp = mTemp ? toNumber(mTemp[1]) : NaN;
+  const min = mRange ? toNumber(mRange[1]) : NaN;
+  const max = mRange ? toNumber(mRange[2]) : NaN;
+
+  if(!isFinite(temp)){
+    const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i);
+    if (near) temp = toNumber(near[1]);
+  }
   if(!isFinite(temp)){
     const all = [...b.matchAll(/-?\d+(?:[.,]\d+)?/g)].map(m=>({v:toNumber(m[0]), i:m.index}));
-    if (mRange) { const rs = mRange.index, re = rs + mRange[0].length; const candidates = all.filter(n => n.i < rs || n.i > re); if (candidates.length) temp = candidates[0].v; }
-    else if (all.length){ temp = all[0].v; }
+    if (mRange) {
+      const rs = mRange.index, re = rs + mRange[0].length;
+      const candidates = all.filter(n => n.i < rs || n.i > re);
+      if (candidates.length) temp = candidates[0].v;
+    } else if (all.length){
+      temp = all[0].v;
+    }
   }
   return { temp, min, max };
 }
+
 async function fetchAlarms(){
-  const q = cfg.GMAIL_QUERY; const msgs = await listMessages(q, 500);
+  const q = cfg.GMAIL_QUERY;
+  const msgs = await listMessages(q, 500);
   for(const m of msgs){
-    const msg = await getMessage(m.id); const subject = getHeader(msg,'Subject')||'(senza oggetto)'; const d = new Date(Number(msg.internalDate));
-    let body=''; (function extract(part){ if(!part) return; if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; } if(part.parts) part.parts.forEach(extract); if(part.mimeType==='text/html' && !body && part.body?.data){ body = decodeBody(part.body.data).replace(/<[^>]+>/g,' '); } })(msg.payload);
+    const msg = await getMessage(m.id);
+    const subject = getHeader(msg,'Subject')||'(senza oggetto)';
+    const d = new Date(Number(msg.internalDate));
+    let body='';
+    (function extract(part){
+      if(!part) return;
+      if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; }
+      if(part.parts) part.parts.forEach(extract);
+      if(part.mimeType==='text/html' && !body && part.body?.data){
+        body = decodeBody(part.body.data).replace(/<[^>]+>/g,' ');
+      }
+    })(msg.payload);
+
     const { temp, min, max } = parseTemperatures(subject, body);
-    const ms = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+
+    const RX_SUBJ_CELL = /Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i;
+    const ms = subject.match(RX_SUBJ_CELL);
+
     const low = (subject + '\n' + body).toLowerCase();
     const isAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(low);
     if(!isAlarm) continue;
+
     const sito = ms ? ms[2].trim() : '';
-    const fid = (function(){ if(sito){ const needle = sito.toLowerCase().trim(); const byHint = state.filiali.find(f => f.name.toLowerCase().includes(needle)); if(byHint) return byHint.id; } for(const f of state.filiali){ if(low.includes(f.name.toLowerCase())) return f.id } return $('#filialeSelect').value || state.filiali[0]?.id; })();
+    const fid = (function(){
+      if(sito){
+        const needle = sito.toLowerCase().trim();
+        const byHint = state.filiali.find(f => f.name.toLowerCase().includes(needle));
+        if(byHint) return byHint.id;
+      }
+      for(const f of state.filiali){ if(low.includes(f.name.toLowerCase())) return f.id }
+      return $('#filialeSelect').value || state.filiali[0]?.id;
+    })();
+
     const row = { date:+d, temp, min, max, status:'alto', subject, id:m.id, bodyPlain: body };
     if(!state.history[fid]) state.history[fid]=[];
     if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
   }
   for(const fid of Object.keys(state.history)){ state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000) }
-  saveState(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); if(location.hash==='#storico') renderStorico();
+  saveState();
+  checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
+  if(location.hash==='#storico') renderStorico();
 }
 
-/**************** ADVANCED MODAL ****************/
+/******************* OPEN ADVANCED MODAL (helper) *******************/
 function openAdvancedModal() {
   const modal = document.getElementById('advModal');
   const gate  = document.getElementById('advGate');
@@ -862,43 +890,77 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   loadState();
   populateFilialeSelect();
 
-  document.querySelectorAll('.route-btn').forEach(b=>{ b.addEventListener('click', ()=> go(b.dataset.route.slice(1))); });
-  const initial = (location.hash || '#home'); setActiveTab(initial); go((initial||'#home').slice(1));
+  document.querySelectorAll('.route-btn').forEach(b=>{
+    b.addEventListener('click', ()=> go(b.dataset.route.slice(1)));
+  });
+  const initial = (location.hash || '#home');
+  setActiveTab(initial);
+  go((initial||'#home').slice(1));
 
-  $('#filialeSelect').addEventListener('change', ()=> applyStreamForCurrent());
+  $('#filialeSelect').addEventListener('change', ()=> startWhepPreferred());
 
   if (state.filiali[0]) $('#filialeSelect').value = state.filiali[0].id;
-  applyStreamForCurrent(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
+  checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
 
+  // Bottoni live
+  $('#btnReconnect').addEventListener('click', ()=> startWhepPreferred());
+
+  // Profilo & filiali
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
   $('#btnAddFiliale').addEventListener('click', ()=>{
     state.filiali.push({
       id: (crypto?.randomUUID?.() || ('f'+Date.now())),
       name: 'Nuova filiale',
-      email: 'allarmi@edilrepairs.ch',
-      streamUrl: '',
-      streamUser: '',
-      streamPass: '',
-      streamMode: 'webrtc',
-      streamAudio: false
+      email: 'allarmi@edilrepairs.ch'
     });
-    saveState(); renderImpostazioni(); populateFilialeSelect();
+    saveState();
+    renderImpostazioni();
+    populateFilialeSelect();
   });
 
   document.getElementById('btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
   document.getElementById('advClose').onclick = ()=> document.getElementById('advModal').classList.remove('show');
-  document.getElementById('advUnlock').onclick = ()=>{ if(document.getElementById('advPwd').value==='979851'){ document.getElementById('advGate').classList.add('hidden'); document.getElementById('advBody').classList.remove('hidden'); setTimeout(()=>{ document.getElementById('advClientId').focus(); }, 100);} else { alert('Password errata'); } };
-  document.getElementById('advSave').onclick = ()=>{ cfg.CLIENT_ID  = document.getElementById('advClientId').value.trim(); cfg.API_KEY = document.getElementById('advApiKey').value.trim(); cfg.GMAIL_QUERY= document.getElementById('advGmailQuery').value.trim(); cfg.TEMP_RX = document.getElementById('advTempRx').value.trim(); cfg.LOGIN_HINT = document.getElementById('advLoginHint').value.trim(); cfg.SCOPES = document.getElementById('advScopes').value.trim() || DEFAULTS.SCOPES; saveState(); initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e))); document.getElementById('advModal')?.classList.remove('show'); };
-  document.getElementById('advTest').onclick = async ()=>{ try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); } };
+  document.getElementById('advUnlock').onclick = ()=>{
+    if(document.getElementById('advPwd').value==='979851'){
+      document.getElementById('advGate').classList.add('hidden');
+      document.getElementById('advBody').classList.remove('hidden');
+      setTimeout(()=>{ document.getElementById('advClientId').focus(); }, 100);
+    }else{
+      alert('Password errata');
+    }
+  };
+  document.getElementById('advSave').onclick = ()=>{
+    cfg.CLIENT_ID  = document.getElementById('advClientId').value.trim();
+    cfg.API_KEY    = document.getElementById('advApiKey').value.trim();
+    cfg.GMAIL_QUERY= document.getElementById('advGmailQuery').value.trim();
+    cfg.TEMP_RX    = document.getElementById('advTempRx').value.trim();
+    cfg.LOGIN_HINT = document.getElementById('advLoginHint').value.trim();
+    cfg.SCOPES     = document.getElementById('advScopes').value.trim() || DEFAULTS.SCOPES;
+    saveState();
+    initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e)));
+    document.getElementById('advModal')?.classList.remove('show');
+  };
+  document.getElementById('advTest').onclick = async ()=>{
+    try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); }
+    catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
+  };
   document.getElementById('advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
 
   async function forceAccountChooser(){
     try{
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
+        openAdvancedModal();
+        return;
+      }
       if (!window.gapi?.client) { await initGapi(); }
       if (!window.tokenClient) { initGIS(); }
-      signOut(); await new Promise(r=>setTimeout(r,50)); await signIn(); await fetchAlarms();
-    }catch(e){ alert('Errore login: ' + (e?.message || e)); }
+      signOut();
+      await new Promise(r=>setTimeout(r,50));
+      await signIn();
+      await fetchAlarms();
+    }catch(e){
+      alert('Errore login: ' + (e?.message || e));
+    }
   }
   document.getElementById('btnSignIn').onclick = forceAccountChooser;
   document.getElementById('btnChangeAccount').onclick = forceAccountChooser;
