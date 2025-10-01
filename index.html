@@ -206,16 +206,14 @@ const DEFAULTS = {
   LOGIN_HINT: ""
 };
 
-/**************** STATO + STORAGE ****************/
-let cfg = {};
-let tokenClient; // GIS
-let gmailReady = false;
+/** ENDPOINT DEL TUO WORKER WHEP **/
+const WORKER_WHEP = 'https://edilrepairstechnology.resinellialimentari.workers.dev/whep';
 
 // DEFAULT FILIALI (campi WebRTC inclusi)
 const DEFAULT_FILIALI = [
-  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
-  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
-  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: '', streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
+  { id: (crypto?.randomUUID?.() || 'castione'),        name: 'Resinelli Castione',        email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
+  { id: (crypto?.randomUUID?.() || 'santantonino'),    name: "Resinelli Sant'Antonino",   email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
+  { id: (crypto?.randomUUID?.() || 'losone'),          name: 'Resinelli Losone',          email: 'allarmi@edilrepairs.ch', streamUrl: WORKER_WHEP, streamUser:'', streamPass:'', streamMode: 'webrtc', streamAudio:false },
 ];
 let state = { username: '', filiali: [], history: {} };
 
@@ -223,7 +221,9 @@ function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
   state.filiali  = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+  // fallback automatico al Worker + chiavi nuove
   state.filiali.forEach(f=>{
+    if(!f.streamUrl) f.streamUrl = WORKER_WHEP;
     if(typeof f.streamUser!=='string') f.streamUser='';
     if(typeof f.streamPass!=='string') f.streamPass='';
     if(!f.streamMode) f.streamMode='webrtc';

@@ -1,110 +1,90 @@
 // src/index.js
-// Proxy WHEP con CORS e Basic Auth lato server.
-// Variabili richieste: 
-//   - STREAM_ID (es: "72500366")
-//   - STREAM_PASS (password stream)
-//   - WHEP_BASE (es: "https://screenstream.io/whep")
-//     oppure WHEP_URL completo (es: "https://screenstream.io/whep/72500366")
-
-function corsHeaders(extra = {}) {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Expose-Headers": "Location",
-    ...extra,
-  };
-}
-
-function basic(env) {
-  const u = env.STREAM_ID || "";
-  const p = env.STREAM_PASS || "";
-  return "Basic " + btoa(`${u}:${p}`);
-}
-
-function upstreamUrl(env) {
-  if (env.WHEP_URL) return env.WHEP_URL;
-  if (env.WHEP_BASE && env.STREAM_ID) {
-    const base = env.WHEP_BASE.replace(/\/+$/, "");
-    return `${base}/${env.STREAM_ID}`;
-  }
-  return null;
-}
-
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/") {
+      // Pagina di salute/miniguida
+      return new Response(
+        `OK – WHEP proxy.
+Config:
+- WHEP_BASE=${env.WHEP_BASE || "(unset)"}
+- WHEP_URL=${env.WHEP_URL || "(unset)"}
+- STREAM_ID=${env.STREAM_ID ? "(set)" : "(unset)"}
+- STREAM_PASS=${env.STREAM_PASS ? "(set)" : "(unset)"}
 
-    // Preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
+Usa POST /whep con Content-Type: application/sdp`,
+        { headers: corsHeaders(request) }
+      );
     }
 
-    // Endpoint WHEP
     if (url.pathname === "/whep") {
-      // DELETE /whep?resource=<encoded_upstream_location>
-      if (request.method === "DELETE") {
-        const resource = url.searchParams.get("resource");
-        if (!resource) {
-          return new Response("Missing resource", { status: 400, headers: corsHeaders() });
-        }
-        const resp = await fetch(resource, {
-          method: "DELETE",
-          headers: { "Authorization": basic(env) },
-        });
-        return new Response(null, { status: resp.status, headers: corsHeaders() });
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders(request, true) });
       }
 
-      // POST SDP → upstream WHEP
-      if (request.method === "POST") {
-        const target = upstreamUrl(env);
-        if (!target || !env.STREAM_ID || !env.STREAM_PASS) {
-          return new Response(
-            "Misconfigured. Set STREAM_ID, STREAM_PASS and WHEP_BASE or WHEP_URL.",
-            { status: 500, headers: corsHeaders() }
-          );
-        }
-        const offerSdp = await request.text();
-
-        const upstream = await fetch(target, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/sdp",
-            "Authorization": basic(env),
-          },
-          body: offerSdp,
-        });
-
-        const answer = await upstream.text();
-        const upstreamLoc = upstream.headers.get("Location") || "";
-
-        // Riscrive Location in una URL del worker: DELETE /whep?resource=<url_upstream>
-        const workerLoc = new URL("/whep", url);
-        if (upstreamLoc) workerLoc.searchParams.set("resource", upstreamLoc);
-
-        return new Response(answer, {
-          status: upstream.status,
-          headers: corsHeaders({
-            "Content-Type": "application/sdp",
-            ...(upstreamLoc ? { "Location": workerLoc.toString() } : {}),
-          }),
-        });
+      if (request.method !== "POST") {
+        return new Response("Not Found", { status: 404, headers: corsHeaders(request) });
       }
 
-      return new Response("Method not allowed", { status: 405, headers: corsHeaders() });
+      // --- Costruisci URL WHEP finale ---
+      const base = env.WHEP_BASE || "https://screenstream.io/whep";
+      const final = env.WHEP_URL || `${base.replace(/\/$/, "")}/${env.STREAM_ID || ""}`;
+
+      if (!final || /\/$/.test(final)) {
+        return new Response("WHEP_URL non configurato", { status: 500, headers: corsHeaders(request) });
+      }
+
+      // Header Authorization: usa prima ENV, altrimenti passa l’Authorization del client se presente
+      let authHeader = null;
+      if (env.STREAM_ID || env.STREAM_PASS) {
+        const token = btoa(`${env.STREAM_ID || ""}:${env.STREAM_PASS || ""}`);
+        authHeader = `Basic ${token}`;
+      } else {
+        const h = request.headers.get("Authorization");
+        if (h && /^Basic\s+/i.test(h)) authHeader = h;
+      }
+
+      const upstream = await fetch(final, {
+        method: "POST",
+        body: await request.text(),
+        headers: {
+          "Content-Type": "application/sdp",
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
+      });
+
+      // Propaga la Location se presente (per DELETE successivo)
+      const headers = corsHeaders(request);
+      const loc = upstream.headers.get("Location");
+      if (loc) headers.set("Location", loc);
+
+      return new Response(await upstream.text(), {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers,
+      });
     }
 
-    // Home diagnostica
-    const lines = [
-      "OK – WHEP proxy.",
-      "Config:",
-      `- WHEP_BASE=${env.WHEP_BASE || "(unset)"}`,
-      `- WHEP_URL=${env.WHEP_URL || "(unset)"}`,
-      `- STREAM_ID=${env.STREAM_ID ? "(set)" : "(unset)"}`,
-      `- STREAM_PASS=${env.STREAM_PASS ? "(set)" : "(unset)"}`,
-      "",
-      "Usa POST /whep con Content-Type: application/sdp",
-    ].join("\n");
-    return new Response(lines, { headers: { "Content-Type": "text/plain", ...corsHeaders() } });
+    if (url.pathname.startsWith("/whep/") && request.method === "DELETE") {
+      // Forward DELETE al resource URL (quando il browser chiude)
+      const target = url.toString().replace(request.url, request.url); // no-op, ma lasciamo lo scheletro
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }
+
+    return new Response("Not Found", { status: 404, headers: corsHeaders(request) });
   },
 };
+
+function corsHeaders(request, preflight = false) {
+  const origin = request.headers.get("Origin") || "*";
+  // Autorizza esplicitamente la tua pagina GitHub Pages (va bene anche "*", ma mettiamo l’origin per sicurezza)
+  const allowOrigin = /^https:\/\/jonniix\.github\.io$/.test(origin) ? origin : "*";
+
+  const h = new Headers();
+  h.set("Access-Control-Allow-Origin", allowOrigin);
+  h.set("Vary", "Origin");
+  h.set("Access-Control-Allow-Methods", "POST, DELETE, OPTIONS");
+  h.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (preflight) h.set("Access-Control-Max-Age", "86400");
+  return h;
+}

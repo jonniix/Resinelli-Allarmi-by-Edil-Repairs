@@ -1,14 +1,14 @@
-name = "resinelli-whep-proxy"
-main = "src/index.js"
-compatibility_date = "2024-01-01"
+name = "edilrepairstechnology"
+main = "src/worker.js"
+compatibility_date = "2024-06-20"
 
 [vars]
-# Se usi WHEP_BASE + STREAM_ID:
+# se hai già WHEP_URL completo NON serve WHEP_BASE
 WHEP_BASE = "https://screenstream.io/whep"
-STREAM_ID = "INSERISCI_ID"    # es. 72500366
+WHEP_URL  = "https://screenstream.io/whep/72500366"
 
-# In alternativa usa WHEP_URL completo e ometti WHEP_BASE:
-# WHEP_URL = "https://screenstream.io/whep/72500366"
+# usa le tue credenziali di visione dello stream
+STREAM_ID = "72500366"
+# STREAM_PASS: mettila come secret
 
-# STREAM_PASS: meglio come secret
-# wrangler secret put STREAM_PASS
+# cors aperto (già nel worker)

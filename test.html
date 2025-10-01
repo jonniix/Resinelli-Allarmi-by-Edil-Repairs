@@ -1,28 +1,30 @@
 <!doctype html>
-<meta charset="utf-8" />
+<meta charset="utf-8">
 <title>WHEP test</title>
-<video id="v" playsinline autoplay muted controls
-       style="width:100%;max-width:420px;background:#000"></video>
+<video id="v" autoplay muted playsinline controls style="width:360px;height:640px;background:#000"></video>
 <script>
-async function playWHEP(endpoint) {
-  const pc = new RTCPeerConnection();
-  const v  = document.getElementById('v');
-  pc.addEventListener('track', e => v.srcObject = e.streams[0]);
-  pc.addTransceiver('video', { direction: 'recvonly' });
+(async () => {
+  const WHEP = "https://edilrepairstechnology.resinellialimentari.workers.dev/whep";
+  const v = document.getElementById('v');
+
+  const pc = new RTCPeerConnection({ iceServers:[{urls:'stun:stun.l.google.com:19302'}] });
+  pc.addTransceiver('video', {direction:'recvonly'});
+  // se vuoi anche audio, decommenta la riga sotto (poi servirà cliccare Play):
+  // pc.addTransceiver('audio', {direction:'recvonly'});
+
+  pc.ontrack = (ev) => { v.srcObject = ev.streams[0]; };
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/sdp' },
-    body: offer.sdp
-  });
-  if (!res.ok) throw new Error('Handshake WHEP fallito: '+res.status+' '+await res.text());
+  let res;
+  try {
+    res = await fetch(WHEP, { method:'POST', headers:{'Content-Type':'application/sdp'}, body: offer.sdp, mode:'cors' });
+  } catch (e) {
+    alert('CORS/HTTPS verso il Worker non raggiungibile'); return;
+  }
+  if (!res.ok) { alert('WHEP handshake fallito: ' + res.status + ' ' + res.statusText); return; }
   const answer = await res.text();
-  await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-}
-
-playWHEP('https://edilrepairstechnology.resinellialimentari.workers.dev/whep'); 
-// Se serve: .../whep/<ID>
+  await pc.setRemoteDescription({type:'answer', sdp:answer});
+})();
 </script>
