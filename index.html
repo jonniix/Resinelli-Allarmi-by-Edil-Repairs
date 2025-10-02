@@ -923,12 +923,16 @@ function populateFilialeSelect(){ const sel = $('#filialeSelect'); sel.innerHTML
 function renderImpostazioni(){
   $('#usernameInput').value = state.username || '';
 
-  // Branding inputs
-  $('#logoUrlInput').value = cfg.LOGO_URL || '';
-  $('#iconUrlInput').value = cfg.ICON_URL || '';
-  $('#devLogoUrlInput').value = cfg.DEV_LOGO_URL || '';
+  // Branding inputs (opzionali, solo se esistono)
+  const logoIn = $('#logoUrlInput');
+  const iconIn = $('#iconUrlInput');
+  const devIn  = $('#devLogoUrlInput');
+  if (logoIn) logoIn.value = cfg.LOGO_URL || '';
+  if (iconIn) iconIn.value = cfg.ICON_URL || '';
+  if (devIn)  devIn.value  = cfg.DEV_LOGO_URL || '';
 
-  const list = $('#filialiList'); list.innerHTML = '';
+  const list = $('#filialiList'); 
+  list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
   <div class="grid md:grid-cols-12 gap-3 items-start">
@@ -1249,13 +1253,21 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
-  // Branding save
-  $('#btnSaveBranding').addEventListener('click', ()=>{
-    cfg.LOGO_URL = $('#logoUrlInput').value.trim();
-    cfg.ICON_URL = $('#iconUrlInput').value.trim();
-    cfg.DEV_LOGO_URL = $('#devLogoUrlInput').value.trim();
-    saveState(); applyBranding(); alert('Loghi salvati.');
-  });
+  // Branding save (aggancia solo se il bottone c'è)
+  const btnSaveBranding = $('#btnSaveBranding');
+  if (btnSaveBranding){
+    btnSaveBranding.addEventListener('click', ()=>{
+      const L = ($('#logoUrlInput')?.value || '').trim();
+      const I = ($('#iconUrlInput')?.value || '').trim();
+      const D = ($('#devLogoUrlInput')?.value || '').trim();
+      cfg.LOGO_URL     = L;
+      cfg.ICON_URL     = I;
+      cfg.DEV_LOGO_URL = D;
+      saveState(); 
+      applyBranding(); 
+      alert('Loghi salvati.');
+    });
+  }
 
   // Advanced modal
   $('#btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
