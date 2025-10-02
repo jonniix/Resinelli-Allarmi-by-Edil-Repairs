@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Resinelli Monitor</title>
+
+  <!-- Favicon dinamica (se impostata nelle impostazioni, verrà aggiornata via JS) -->
+  <link id="dynamic-favicon" rel="icon" href="data:," />
+
   <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Identity Services -->
@@ -42,6 +46,15 @@
     .live-toolbar{ position:absolute; inset:0 0 auto 0; height:40px; display:flex; gap:.5rem; align-items:center; padding:.25rem .5rem; background:rgba(2,6,23,.65); z-index:2; }
     #statusBox{ position:absolute; left:0; right:0; top:42px; z-index:2; text-align:center }
     .min-h-5{ min-height:1.25rem }
+
+    /* Stampa */
+    @media print{
+      header, #advModal, #rowModal, nav, #statusBar, #route-impostazioni, #btnExportCsv, #btnPrint, #filterRangeWrap { display:none !important; }
+      body{ background:#fff; color:#000; }
+      .glass{ background:#fff; border:none; }
+      .print-footer{ position:fixed; bottom:0; left:0; right:0; font-size:12px; padding:8px 16px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ccc; }
+      .print-logos img{ max-height:22px; }
+    }
   </style>
 </head>
 <body>
@@ -50,7 +63,10 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
       <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div class="flex items-center gap-3">
-          <div class="h-9 w-9 rounded-lg brand-grad"></div>
+          <div id="brandLogoBox" class="h-9 w-9 rounded-lg overflow-hidden grid place-items-center brand-grad">
+            <!-- Se logo impostato, viene mostrata un'immagine -->
+            <img id="brandLogoImg" class="hidden h-full w-full object-cover" alt="Logo sito">
+          </div>
           <div>
             <div class="text-lg font-semibold tracking-wide">Resinelli Monitor</div>
             <div class="text-[12px] text-slate-400 -mt-0.5">Celle frigo · live & storico</div>
@@ -148,8 +164,30 @@
       </div>
     </section>
 
-    <section id="route-storico" class="hidden space-y-6">
+    <!-- STORICO + filtri + export -->
+    <section id="route-storico" class="hidden space-y-4">
+      <div id="filterRangeWrap" class="flex flex-wrap items-center gap-2">
+        <span class="text-sm text-slate-400">Intervallo:</span>
+        <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="24h">24h</button>
+        <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="7d">7 giorni</button>
+        <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="30d">30 giorni</button>
+        <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="all">Tutto</button>
+        <div class="ml-auto flex items-center gap-2">
+          <button id="btnExportCsv" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 text-sm">Esporta CSV</button>
+          <button id="btnPrint" class="px-3 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-sm">Stampa / PDF</button>
+        </div>
+      </div>
       <div id="storicoWrap" class="space-y-6"></div>
+      <!-- Footer stampa -->
+      <div class="print-footer hidden">
+        <div class="print-logos">
+          <img id="printLogoSite" alt="Logo sito"/>
+        </div>
+        <div id="printFooterText">Storico Resinelli — generato il <span id="printDate"></span></div>
+        <div class="print-logos">
+          <img id="printLogoDev" alt="Logo sviluppatore"/>
+        </div>
+      </div>
     </section>
 
     <section id="route-impostazioni" class="hidden space-y-6">
@@ -159,6 +197,26 @@
           <label class="block text-sm text-slate-300">Nome utente
             <input id="usernameInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="Es. Mario" />
           </label>
+        </div>
+      </div>
+
+      <!-- Branding / loghi -->
+      <div class="glass rounded-2xl p-5">
+        <div class="font-medium mb-3">Branding & loghi</div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm text-slate-300">Logo sito (URL)
+            <input id="logoUrlInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://.../logo.png" />
+          </label>
+          <label class="block text-sm text-slate-300">Logo icona / Favicon (URL)
+            <input id="iconUrlInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://.../icon.png" />
+          </label>
+          <label class="block text-sm text-slate-300">Logo sviluppatore (URL)
+            <input id="devLogoUrlInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://.../dev-logo.svg" />
+          </label>
+          <div class="text-xs text-slate-400 sm:col-span-2">Suggerimento: usa immagini HTTPS e leggere (PNG/SVG).</div>
+        </div>
+        <div class="mt-3">
+          <button id="btnSaveBranding" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva loghi</button>
         </div>
       </div>
 
@@ -240,7 +298,12 @@ const DEFAULTS = {
   SCOPES: "https://www.googleapis.com/auth/gmail.readonly",
   GMAIL_QUERY: "newer_than:30d (subject:(temperatura) OR subject:(allarme) OR subject:(temperature))",
   TEMP_RX: "(-?\\d+(?:[\\.,]\\d+)?)\\s*(?:°\\s*[Cc]|gradi)",
-  LOGIN_HINT: "resinellialimentari@gmail.com"
+  LOGIN_HINT: "resinellialimentari@gmail.com",
+
+  /* Branding */
+  LOGO_URL: "",      // logo sito nell'header e in stampa
+  ICON_URL: "",      // favicon
+  DEV_LOGO_URL: ""   // logo sviluppatore in stampa (opzionale)
 };
 
 const DEFAULT_FILIALI = [
@@ -252,7 +315,7 @@ const DEFAULT_FILIALI = [
     jitsiDomain: 'meet.jit.si',
     jitsiRoom: 'Resinelli-castione',
     jitsiPass: '',
-    streamUrl: '',   // per WHEP/Worker (opzionale)
+    streamUrl: '',
     streamUser: '',
     streamPass: '',
     streamAudio: false,
@@ -264,7 +327,7 @@ const DEFAULT_FILIALI = [
 ];
 
 let state = { username: '', filiali: [], history: {} };
-let cfg = {};            // <— aggiunto
+let cfg = {};
 let tokenClient;
 let gmailReady = false;
 
@@ -274,7 +337,6 @@ function loadState(){
   state.username = s.username || '';
   const incoming = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
   state.filiali = incoming.map((f,i)=>{
-    // Migrazione/compatibilità
     let provider = f.streamProvider;
     if (!provider) provider = f.streamUrl ? 'whep' : 'jitsi';
     return {
@@ -295,6 +357,9 @@ function loadState(){
   });
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
+
+  // Applica subito favicon e loghi se presenti
+  applyBranding();
 }
 function saveState(){
   localStorage.setItem('resinelli_monitor', JSON.stringify({ ...state, cfg }));
@@ -303,11 +368,16 @@ function saveState(){
 /**************** HELPERS ****************/
 const $ = (sel)=> document.querySelector(sel);
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild }
-function fmtDate(d){ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) }
+function fmtDate(d){ try { return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) } catch(_) { return new Date(d).toLocaleString() } }
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
 function normalizeText(s){ return (s||'').replace(/[–—−]/g,'-').replace(/\s+/g,' ').trim(); }
 function statusCellKey(subject){ const m=(subject||'').match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i); return m? normalizeText(m[1]).toLowerCase() : normalizeText(subject||'').toLowerCase(); }
 function copyTxt(t){ try{ return navigator.clipboard.writeText(t||''); }catch{} }
+function downloadFile(filename, content, mime='text/plain'){
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 
 /*********** LIVE height ***********/
 function uiBindLiveSizer() {
@@ -424,7 +494,7 @@ function startVdo(f){
   frame.classList.remove('hidden'); box.classList.add('hidden'); vid.classList.add('hidden'); none.classList.add('hidden');
 }
 
-async function startWhep(){ // stub: puoi re-implementare la tua WHEP join qui se riattivi un endpoint
+async function startWhep(){ // stub
   const none = document.getElementById('noStream');
   none.classList.remove('hidden');
   setStatus('WHEP non configurato');
@@ -464,7 +534,6 @@ function openOnProvider(f) {
 async function startLiveForCurrent(){
   const frame = $('#liveFrame'); const video = $('#webrtcVideo'); const none = $('#noStream');
   const jitsiBox = $('#jitsiContainer');
-  // reset visibilità
   frame.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden'); jitsiBox.classList.add('hidden');
   setStatus(''); showError('');
   await stopWhepResource(); cleanupWebRTC(); destroyJitsi();
@@ -473,13 +542,8 @@ async function startLiveForCurrent(){
   if(!f){ showError('Nessuna filiale selezionata.'); return; }
   updateLiveToolbar();
 
-  if (f.streamProvider === 'vdo'){
-    startVdo(f); setStatus('VDO.Ninja'); return;
-  }
-  if (f.streamProvider === 'jitsi') {
-    startJitsi(f); setStatus('Jitsi Meet'); return;
-  }
-  // whep
+  if (f.streamProvider === 'vdo'){ startVdo(f); setStatus('VDO.Ninja'); return; }
+  if (f.streamProvider === 'jitsi'){ startJitsi(f); setStatus('Jitsi Meet'); return; }
   startWhep();
 }
 
@@ -596,11 +660,116 @@ function go(route){
 }
 window.addEventListener('hashchange', ()=>{ const r = (location.hash||'#home').slice(1); if(routes.includes(r)) go(r); });
 
-/**************** IMPOSTAZIONI & STORICO ****************/
+/**************** STORICO: filtro + export ****************/
+let currentRange = 'all';
+function getCutoff(rangeKey){
+  const now = Date.now();
+  if (rangeKey==='24h') return now - 24*3600*1000;
+  if (rangeKey==='7d')  return now - 7*24*3600*1000;
+  if (rangeKey==='30d') return now - 30*24*3600*1000;
+  return 0; // all
+}
+function filterRowsByRange(rows, rangeKey){
+  const cutoff = getCutoff(rangeKey);
+  return cutoff ? rows.filter(r=> r.date >= cutoff) : rows.slice();
+}
+function renderStorico(){
+  const wrap = $('#storicoWrap'); wrap.innerHTML = '';
+  const rangeKey = currentRange;
+  for(const f of state.filiali){
+    const allRows = (state.history[f.id]||[]).slice().sort((a,b)=>b.date-a.date);
+    const rows = filterRowsByRange(allRows, rangeKey);
+    const openCount = (()=>{
+      const lastByCell=new Map();
+      for(const r of allRows.slice().reverse()){ const key=r.cellKey||statusCellKey(r.subject); lastByCell.set(key,r.status); }
+      let c=0; for(const st of lastByCell.values()){ if(st==='alto') c++; } return c;
+    })();
+    const section = el(`<div class="glass rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-medium">${f.name}</div>
+        <div class="text-xs text-slate-400">${rows.length} eventi nel periodo · ${openCount} allarmi aperti</div>
+      </div>
+      <div class="overflow-x-auto"><table class="min-w-full text-sm">
+        <thead class="text-slate-400"><tr>
+          <th class="text-left py-2 pr-4">Data</th>
+          <th class="text-left py-2 pr-4">Stato</th>
+          <th class="text-left py-2 pr-4">Temperatura</th>
+          <th class="text-left py-2 pr-4">Range</th>
+          <th class="text-left py-2 pr-4">Cella/Descrizione</th>
+          <th class="text-left py-2 pr-4">Oggetto</th>
+        </tr></thead>
+        <tbody></tbody></table></div></div>`);
+    const tbody = section.querySelector('tbody');
+    rows.forEach(r=>{
+      let cella=''; let subject=r.subject||''; let minmax='—';
+      const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
+      if (isFinite(r.min) && isFinite(r.max)) minmax = r.min + '–' + r.max + ' °C';
+      const badge = (r.status==='alto')
+        ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
+        : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>';
+      const tr = el(`<tr class="border-t border-white/10 cursor-pointer hover:bg-white/5">
+        <td class="py-2 pr-4 whitespace-nowrap">${fmtDate(new Date(r.date))}</td>
+        <td class="py-2 pr-4">${badge}</td>
+        <td class="py-2 pr-4">${isFinite(r.temp)? (r.temp.toFixed(1)+' °C') : '—'}</td>
+        <td class="py-2 pr-4">${minmax}</td>
+        <td class="py-2 pr-4">${cella}</td>
+        <td class="py-2 pr-4">${subject}</td>
+      </tr>`);
+      tr.addEventListener('click', ()=> uiOpenRowDetails(r, f.name));
+      tbody.appendChild(tr);
+    });
+    wrap.appendChild(section);
+  }
+}
+
+function exportCsv(){
+  const rangeKey = currentRange;
+  const cutoff = getCutoff(rangeKey);
+  const lines = [];
+  lines.push(['Filiale','Data','Stato','Temperatura','Min','Max','Cella/Descrizione','Oggetto'].join(';'));
+  for(const f of state.filiali){
+    const rows = (state.history[f.id]||[]);
+    rows.filter(r => !cutoff || r.date>=cutoff).sort((a,b)=>a.date-b.date).forEach(r=>{
+      const d = fmtDate(new Date(r.date));
+      const stato = r.status==='alto' ? 'ALLARME' : 'OK';
+      const t = isFinite(r.temp)? r.temp.toString().replace('.',',') : '';
+      const min = isFinite(r.min)? r.min.toString().replace('.',',') : '';
+      const max = isFinite(r.max)? r.max.toString().replace('.',',') : '';
+      let cella=''; let subject=r.subject||'';
+      const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
+      const row = [f.name, d, stato, t, min, max, cella.replaceAll(';',','), subject.replaceAll(';',',')];
+      lines.push(row.map(v => /[;"\n]/.test(v) ? `"${v.replaceAll('"','""')}"` : v).join(';'));
+    });
+  }
+  downloadFile(`storico_${rangeKey}_${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'), 'text/csv;charset=utf-8;');
+}
+
+function printPage(){
+  // Aggiorna footer stampa con loghi e data
+  const pf = document.querySelector('.print-footer'); if (!pf) return;
+  document.getElementById('printDate').textContent = fmtDate(new Date());
+  const site = document.getElementById('printLogoSite');
+  const dev  = document.getElementById('printLogoDev');
+  site.src = cfg.LOGO_URL || '';
+  dev.src  = cfg.DEV_LOGO_URL || '';
+  pf.classList.remove('hidden');
+  window.print();
+  // (niente cleanup necessario in genere)
+}
+
+/**************** IMPOSTAZIONI & STORICO (UI) ****************/
 function populateFilialeSelect(){ const sel = $('#filialeSelect'); sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join(''); }
 
 function renderImpostazioni(){
   $('#usernameInput').value = state.username || '';
+
+  // Branding inputs
+  $('#logoUrlInput').value = cfg.LOGO_URL || '';
+  $('#iconUrlInput').value = cfg.ICON_URL || '';
+  $('#devLogoUrlInput').value = cfg.DEV_LOGO_URL || '';
+
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
@@ -693,50 +862,6 @@ function renderImpostazioni(){
 
     list.appendChild(card);
   });
-}
-
-function renderStorico(){
-  const wrap = $('#storicoWrap'); wrap.innerHTML = '';
-  for(const f of state.filiali){
-    const rows = (state.history[f.id]||[]).slice().sort((a,b)=>b.date-a.date);
-    const openCount = (()=>{ const lastByCell=new Map(); for(const r of rows.slice().reverse()){ const key=r.cellKey||statusCellKey(r.subject); lastByCell.set(key,r.status); } let c=0; for(const st of lastByCell.values()){ if(st==='alto') c++; } return c; })();
-    const section = el(`<div class="glass rounded-2xl p-5">
-      <div class="flex items-center justify-between mb-3">
-        <div class="font-medium">${f.name}</div>
-        <div class="text-xs text-slate-400">${rows.length} eventi · ${openCount} allarmi aperti</div>
-      </div>
-      <div class="overflow-x-auto"><table class="min-w-full text-sm">
-        <thead class="text-slate-400"><tr>
-          <th class="text-left py-2 pr-4">Data</th>
-          <th class="text-left py-2 pr-4">Stato</th>
-          <th class="text-left py-2 pr-4">Temperatura</th>
-          <th class="text-left py-2 pr-4">Range</th>
-          <th class="text-left py-2 pr-4">Cella/Descrizione</th>
-          <th class="text-left py-2 pr-4">Oggetto</th>
-        </tr></thead>
-        <tbody></tbody></table></div></div>`);
-    const tbody = section.querySelector('tbody');
-    rows.forEach(r=>{
-      let cella=''; let subject=r.subject||''; let minmax='—';
-      const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
-      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
-      if (isFinite(r.min) && isFinite(r.max)) minmax = r.min + '–' + r.max + ' °C';
-      const badge = (r.status==='alto')
-        ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
-        : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>';
-      const tr = el(`<tr class="border-t border-white/10 cursor-pointer hover:bg-white/5">
-        <td class="py-2 pr-4 whitespace-nowrap">${fmtDate(new Date(r.date))}</td>
-        <td class="py-2 pr-4">${badge}</td>
-        <td class="py-2 pr-4">${isFinite(r.temp)? (r.temp.toFixed(1)+' °C') : '—'}</td>
-        <td class="py-2 pr-4">${minmax}</td>
-        <td class="py-2 pr-4">${cella}</td>
-        <td class="py-2 pr-4">${subject}</td>
-      </tr>`);
-      tr.addEventListener('click', ()=> uiOpenRowDetails(r, f.name));
-      tbody.appendChild(tr);
-    });
-    wrap.appendChild(section);
-  }
 }
 
 /**************** AUTH (gapi + GIS) ****************/
@@ -837,11 +962,9 @@ async function fetchAlarms(){
     let status = inferStatusSmart(subject, body);
     const { temp, min, max } = parseTemperatures(subject, body);
 
-    // Se è segnalato come allarme ma la temperatura è nel range, forza OK
     if(status==='alto' && isFinite(temp) && isFinite(min) && isFinite(max) && min <= temp && temp <= max){
       status = 'ok';
     }
-
     if(!status) continue;
 
     const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
@@ -885,6 +1008,25 @@ function openAdvancedModal() {
   $('#advLoginHint').value = cfg?.LOGIN_HINT || '';
   $('#advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '';
   setTimeout(()=>{ $('#advPwd').focus(); }, 100);
+}
+
+/**************** BRANDING ****************/
+function applyBranding(){
+  const logoBox = $('#brandLogoBox');
+  const logoImg = $('#brandLogoImg');
+  if (cfg.LOGO_URL) {
+    logoImg.src = cfg.LOGO_URL;
+    logoImg.classList.remove('hidden');
+    logoBox.classList.remove('brand-grad');
+  } else {
+    logoImg.classList.add('hidden');
+    logoImg.removeAttribute('src');
+    logoBox.classList.add('brand-grad');
+  }
+  const fav = $('#dynamic-favicon');
+  if (cfg.ICON_URL){ fav.href = cfg.ICON_URL; }
+
+  // stampa footer (immagini caricate in printPage)
 }
 
 /**************** BOOT ****************/
@@ -931,6 +1073,14 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
+  // Branding save
+  $('#btnSaveBranding').addEventListener('click', ()=>{
+    cfg.LOGO_URL = $('#logoUrlInput').value.trim();
+    cfg.ICON_URL = $('#iconUrlInput').value.trim();
+    cfg.DEV_LOGO_URL = $('#devLogoUrlInput').value.trim();
+    saveState(); applyBranding(); alert('Loghi salvati.');
+  });
+
   // Advanced modal
   $('#btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
   $('#advClose').onclick = ()=> $('#advModal').classList.remove('show');
@@ -960,10 +1110,20 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   $('#btnSignIn').onclick = forceAccountChooser;
   $('#btnChangeAccount').onclick = forceAccountChooser;
 
-  // avvia live
+  // Filtri storico + export
+  document.querySelectorAll('.range-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      currentRange = b.dataset.range || 'all';
+      renderStorico();
+    });
+  });
+  $('#btnExportCsv').addEventListener('click', exportCsv);
+  $('#btnPrint').addEventListener('click', printPage);
+
+  // Avvia live
   startLiveForCurrent();
 
-  // cleanup (se un domani userai WHEP)
+  // cleanup
   window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); destroyJitsi(); });
 });
 </script>
