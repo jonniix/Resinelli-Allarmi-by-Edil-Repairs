@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="it" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -41,49 +41,69 @@
     #rowModalBody{ background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0 }
     .tab-btn{ border-bottom:2px solid transparent }
     .tab-btn.active{ color:#fff; border-color:var(--acc2) }
-    .badge{ display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.2rem .5rem; border-radius:.5rem; border:1px solid transparent }
-
-    .live-toolbar{ position:absolute; inset:0 0 auto 0; height:40px; display:flex; gap:.5rem; align-items:center; padding:.25rem .5rem; background:rgba(2,6,23,.65); z-index:2; }
-    #statusBox{ position:absolute; left:0; right:0; top:42px; z-index:2; text-align:center }
-    .min-h-5{ min-height:1.25rem }
-
-    /* Sidebar styles */
-    .sidebar-logos {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding: 16px 12px 8px;
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.25em;
+      padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: 600;
+      background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0;
+      transition: background .2s;
     }
-
-    .logo-img {
-      display: block;
-      max-width: 100%;
-      max-height: 56px;
-      width: auto;
-      height: auto;
-      object-fit: contain;
-      image-rendering: auto;
+    .badge-success {
+      background: #e0f2fe; color: #0e7490; border-color: #bae6fd;
     }
-
-    .gmail-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px 12px;
-      font-size: 0.925rem;
-      opacity: 0.9;
+    .badge-danger {
+      background: #fee2e2; color: #b91c1c; border-color: #fecaca;
     }
-
-    .gmail-status .dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #9aa0a6; /* default: grigio = non connesso */
+    .badge-warning {
+      background: #fef9c3; color: #92400e; border-color: #fde68a;
     }
-
-    .gmail-status.connected .dot { background: #22c55e; } /* verde */
-    .gmail-status.error .dot { background: #ef4444; }     /* rosso opzionale */
-
+    [data-theme="dark"] .badge {
+      background: #1e293b; color: #e0e7ef; border-color: #334155;
+    }
+    [data-theme="dark"] .badge-success {
+      background: #0e7490; color: #e0f2fe; border-color: #334155;
+    }
+    [data-theme="dark"] .badge-danger {
+      background: #b91c1c; color: #fee2e2; border-color: #334155;
+    }
+    [data-theme="dark"] .badge-warning {
+      background: #92400e; color: #fef9c3; border-color: #334155;
+    }
+    .focus-ring:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px #2563eb50;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *:before, *:after { transition: none !important; animation-duration: 0s !important; }
+    }
+    html,body{ height:100% }
+    body{
+      background:
+        radial-gradient(1000px 520px at 15% -10%, rgba(147,197,253,.15), transparent),
+        radial-gradient(900px 520px at 100% 0%, rgba(34,211,238,.12), transparent),
+        linear-gradient(180deg, var(--bg1), var(--bg2));
+      color:#e5e7eb;
+    }
+    .glass{ background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+            backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.08) }
+    .brand-grad{ background:linear-gradient(90deg,var(--acc),var(--acc2)); }
+    .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
+    .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
+    .stream-media, .stream-frame{ width:100%; height:100%; object-fit:contain; background:#000; border:0 }
+    .scanbar{ position:relative; overflow:hidden }
+    .scanbar::after{ content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent); transform:translateX(-100%); animation:scan 2.2s infinite }
+    @keyframes scan{ 0%{transform:translateX(-100%)} 60%{transform:translateX(100%)} 100%{transform:translateX(100%)} }
+    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50 }
+    .overlay.show{ display:flex }
+    #rowModalBody{ background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0 }
+    .tab-btn{ border-bottom:2px solid transparent }
+    .tab-btn.active{ color:#fff; border-color:var(--acc2) }
+    .icon-24 { width:24px; height:24px; display:inline-block; vertical-align:middle }
+    .icon-muted { opacity:.8 }
+    .icon-avatar {
+      width: 32px; height: 32px; border-radius: 9999px;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      display: flex; align-items: center; justify-content: center;
+    }
     /* Mobile responsive improvements */
     @media (max-width: 768px) {
       .sidebar-logos {
@@ -129,7 +149,7 @@
     }
   </style>
 </head>
-<body>
+<body class="min-h-screen selection:bg-sky-300/40 selection:text-sky-950">
   <!-- TOP BAR -->
   <header class="glass sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
@@ -413,6 +433,57 @@ let state = { username: '', filiali: [], history: {} };
 let cfg = {};
 let tokenClient;
 let gmailReady = false;
+
+/* ===================== AUTH GMAIL ===================== */
+async function waitForGoogleGIS(maxMs=10000){
+  const t0 = Date.now();
+  while (!window.google?.accounts?.oauth2) {
+    if (Date.now()-t0 > maxMs) throw new Error("google GIS non caricato");
+    await new Promise(r=>setTimeout(r,50));
+  }
+}
+
+async function initGIS(){
+  await waitForGoogleGIS();
+  if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
+    alert('Devi impostare il Google OAuth CLIENT_ID.');
+    window.openAdvancedModal?.();
+    throw new Error('CLIENT_ID mancante');
+  }
+  if (tokenClient) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: cfg.CLIENT_ID,
+    scope: (cfg?.SCOPES || DEFAULTS.SCOPES),
+    hint: cfg.LOGIN_HINT || undefined,
+    callback: (resp)=>{
+      if (resp?.access_token){
+        gapi.client.setToken({ access_token: resp.access_token });
+        updateGmailStatusUI();
+      }
+    }
+  });
+}
+
+async function signIn(prompt=''){
+  return new Promise((resolve, reject)=>{
+    try{
+      tokenClient.callback=(r)=> r?.access_token ? resolve(r) : reject(r);
+      tokenClient.requestAccessToken({ prompt, hint: cfg.LOGIN_HINT || '' });
+    }catch(e){ reject(e); }
+  });
+}
+
+async function signOut(){
+  try{
+    const tk = gapi?.client?.getToken?.();
+    if (tk?.access_token){
+      google.accounts.oauth2.revoke(tk.access_token, ()=>{});
+      gapi.client.setToken(null);
+    }
+    updateGmailStatusUI();
+    stopGmailPolling();
+  }catch(e){ console.warn("Errore durante signOut", e); }
+}
 
 /**************** GMAIL SERVICE ****************/
 let gmailPollHandle = null;
@@ -1046,32 +1117,6 @@ async function initGapi(){
       }catch(e){ reject(e) }
     });
   });
-}
-function initGIS(){
-  if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-    alert('Devi impostare il Google OAuth CLIENT_ID.');
-    openAdvancedModal();
-    throw new Error('CLIENT_ID mancante');
-  }
-  if (window.tokenClient) return;
-  window.tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: cfg.CLIENT_ID,
-    scope: (cfg?.SCOPES || "https://www.googleapis.com/auth/gmail.readonly"),
-    hint: cfg.LOGIN_HINT || undefined,
-    callback: (resp)=>{ if (resp?.access_token){ gapi.client.setToken({ access_token: resp.access_token }); gmailReady = true; } }
-  });
-}
-
-// Gmail silent sign-in
-async function trySilentSignIn() {
-  try {
-    if (!window.gapi?.client) await initGapi();
-    if (!window.tokenClient) initGIS();
-    return await new Promise((resolve, reject) => {
-      tokenClient.callback = (r) => r?.access_token ? resolve(r) : reject(r);
-      tokenClient.requestAccessToken({ prompt: '', hint: cfg.LOGIN_HINT || 'resinellialimentari@gmail.com' });
-    });
-  } catch (_) { return null; }
 }
 
 /**************** GMAIL: parsing (allarme ma temp nel range = OK) ****************/
