@@ -10,6 +10,8 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- Google API Client (Gmail) -->
   <script src="https://apis.google.com/js/api.js" async defer></script>
+  <!-- Jitsi Meet IFrame API -->
+  <script src="https://meet.jit.si/external_api.js"></script>
 
   <style>
     :root{ --bg1:#0b1220; --bg2:#0f1a2c; --acc:#93c5fd; --acc2:#22d3ee; --live-h:75svh }
@@ -38,7 +40,7 @@
     .badge{ display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.2rem .5rem; border-radius:.5rem; border:1px solid transparent }
 
     .live-toolbar{ position:absolute; inset:0 0 auto 0; height:40px; display:flex; gap:.5rem; align-items:center; padding:.25rem .5rem; background:rgba(2,6,23,.65); z-index:2; }
-    #statusBox{ position:absolute; left:0; right:0; top:42px; z-index:2; }
+    #statusBox{ position:absolute; left:0; right:0; top:42px; z-index:2; text-align:center }
     .min-h-5{ min-height:1.25rem }
   </style>
 </head>
@@ -117,10 +119,16 @@
               </div>
             </div>
 
-            <div id="statusBox" class="p-2 text-center text-xs text-slate-300"></div>
-            <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessuna live avviata</div>
+            <div id="statusBox" class="p-2 text-xs text-slate-300"></div>
+
+            <!-- Container Jitsi -->
+            <div id="jitsiContainer" class="absolute inset-0 hidden"></div>
+            <!-- Iframe per VDO.Ninja (o altri embeddable) -->
+            <iframe id="liveFrame" class="hidden stream-frame" allow="autoplay; fullscreen; camera; microphone; display-capture"></iframe>
+            <!-- Video WebRTC WHEP (se mai lo userai) -->
             <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
-            <iframe id="liveFrame" class="hidden stream-frame" allow="camera; microphone; display-capture"></iframe>
+            <!-- Placeholder se nulla visibile -->
+            <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessuna live avviata</div>
           </div>
           <div id="errorBox" class="text-xs text-rose-300 min-h-5"></div>
         </div>
@@ -162,8 +170,9 @@
         </div>
         <div id="filialiList" class="mt-4 space-y-3"></div>
         <div class="mt-2 text-xs text-slate-400">
-          <b>Provider VDO.Ninja</b> = embed diretto in pagina (consigliato).<br>
-          <b>ScreenStream (sito)</b> = apre screenstream.io in nuova scheda con ID/Password compilati.
+          <b>Jitsi Meet</b> = embed diretto in pagina (stanza + password).<br>
+          <b>VDO.Ninja</b> = embed diretto in pagina (view ID + password).<br>
+          <b>WHEP/Worker</b> = solo se riattivi un endpoint compatibile.
         </div>
       </div>
 
@@ -234,65 +243,56 @@ const DEFAULTS = {
   LOGIN_HINT: "resinellialimentari@gmail.com"
 };
 
-/**************** STATO ****************/
-let cfg = {};
-let tokenClient;
-let gmailReady = false;
-
-/* Provider supportati:
-   - 'vdo'  -> VDO.Ninja (iframe, consigliato)
-   - 'ssite'-> ScreenStream (apre sito esterno con join precompilato)
-*/
 const DEFAULT_FILIALI = [
   {
     id: 'castione',
     name: 'Resinelli Castione',
     email: 'allarmi@edilrepairs.ch',
-    provider: 'vdo',
-    streamUrl: '',               // non usato per vdo
-    streamUser: '72500366',      // ID/alias
-    streamPass: 'Yachc6',        // Password attuale
-    streamAudio: false
+    streamProvider: 'jitsi',
+    jitsiDomain: 'meet.jit.si',
+    jitsiRoom: 'Resinelli-castione',
+    jitsiPass: '',
+    streamUrl: '',   // per WHEP/Worker (opzionale)
+    streamUser: '',
+    streamPass: '',
+    streamAudio: false,
+    vdoViewId: '',
+    vdoPassword: ''
   },
-  {
-    id: 'santantonino',
-    name: "Resinelli Sant'Antonino",
-    email: 'allarmi@edilrepairs.ch',
-    provider: 'vdo',
-    streamUrl: '',
-    streamUser: '72500366',
-    streamPass: 'Yachc6',
-    streamAudio: false
-  },
-  {
-    id: 'losone',
-    name: 'Resinelli Losone',
-    email: 'allarmi@edilrepairs.ch',
-    provider: 'vdo',
-    streamUrl: '',
-    streamUser: '72500366',
-    streamPass: 'Yachc6',
-    streamAudio: false
-  }
+  { id:'santantonino', name:"Resinelli Sant'Antonino", email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:"Resinelli-santantonino", jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' },
+  { id:'losone', name:'Resinelli Losone', email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:'Resinelli-losone', jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' }
 ];
 
 let state = { username: '', filiali: [], history: {} };
+let cfg = {};            // <— aggiunto
+let tokenClient;
+let gmailReady = false;
 
 /**************** STORAGE ****************/
 function loadState(){
   const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
   state.username = s.username || '';
   const incoming = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
-  state.filiali = incoming.map((f,i)=>({
-    id: f.id || ('f'+i),
-    name: f.name || ('Filiale '+(i+1)),
-    email: f.email || 'allarmi@edilrepairs.ch',
-    provider: f.provider || 'vdo',
-    streamUrl: f.streamUrl || '',
-    streamUser: (typeof f.streamUser==='string' ? f.streamUser : ''),
-    streamPass: (typeof f.streamPass==='string' ? f.streamPass : ''),
-    streamAudio: !!f.streamAudio
-  }));
+  state.filiali = incoming.map((f,i)=>{
+    // Migrazione/compatibilità
+    let provider = f.streamProvider;
+    if (!provider) provider = f.streamUrl ? 'whep' : 'jitsi';
+    return {
+      id: f.id || ('f'+i),
+      name: f.name || ('Filiale '+(i+1)),
+      email: f.email || 'allarmi@edilrepairs.ch',
+      streamProvider: provider,
+      jitsiDomain: f.jitsiDomain || 'meet.jit.si',
+      jitsiRoom: f.jitsiRoom || '',
+      jitsiPass: typeof f.jitsiPass === 'string' ? f.jitsiPass : '',
+      streamUrl: f.streamUrl || '',
+      streamUser: typeof f.streamUser === 'string' ? f.streamUser : '',
+      streamPass: typeof f.streamPass === 'string' ? f.streamPass : '',
+      streamAudio: !!f.streamAudio,
+      vdoViewId: typeof f.vdoViewId === 'string' ? f.vdoViewId : '',
+      vdoPassword: typeof f.vdoPassword === 'string' ? f.vdoPassword : ''
+    };
+  });
   state.history  = s.history || {};
   cfg = Object.assign({}, DEFAULTS, s.cfg||{});
 }
@@ -324,15 +324,71 @@ function uiBindLiveSizer() {
   });
 }
 
-/**************** LIVE (provider-aware) ****************/
+/**************** LIVE: Provider-aware (Jitsi / VDO / WHEP) ****************/
 let webrtcSession = null;
+let jitsiApi = null;
+
 function setStatus(msg){ const el=$('#statusBox'); if(el) el.textContent = msg || ""; }
 function showError(msg){ $('#errorBox').textContent = msg || ""; }
-function cleanupWebRTC(){ try{ if(webrtcSession?.pc){ webrtcSession.pc.getTransceivers?.().forEach(t=>t.stop?.()); webrtcSession.pc.getSenders?.().forEach(s=>s.track?.stop?.()); webrtcSession.pc.getReceivers?.().forEach(r=>r.track?.stop?.()); webrtcSession.pc.close?.(); } }catch{} webrtcSession=null; }
+
+function cleanupWebRTC(){
+  try{
+    if(webrtcSession?.pc){
+      webrtcSession.pc.getTransceivers?.().forEach(t=>t.stop?.());
+      webrtcSession.pc.getSenders?.().forEach(s=>s.track?.stop?.());
+      webrtcSession.pc.getReceivers?.().forEach(r=>r.track?.stop?.());
+      webrtcSession.pc.close?.();
+    }
+  }catch{}
+  webrtcSession = null;
+}
 async function stopWhepResource(){ if(webrtcSession?.resourceUrl){ try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{} } }
 
+function destroyJitsi(){ try{ jitsiApi?.dispose?.(); }catch{} jitsiApi = null; }
+
+function startJitsi(f) {
+  destroyJitsi();
+  const box = document.getElementById('jitsiContainer');
+  const frame = document.getElementById('liveFrame');
+  const vid = document.getElementById('webrtcVideo');
+  const none = document.getElementById('noStream');
+
+  if (!f.jitsiDomain || !f.jitsiRoom) {
+    none.classList.remove('hidden'); box.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden');
+    showError('Config Jitsi incompleta (domain/room).'); return;
+  }
+  none.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden'); box.classList.remove('hidden');
+
+  const domain = f.jitsiDomain || 'meet.jit.si';
+  const options = {
+    roomName: f.jitsiRoom,
+    parentNode: box,
+    width: '100%',
+    height: '100%',
+    configOverwrite: {
+      prejoinPageEnabled: false,
+      disableDeepLinking: true,
+      startWithAudioMuted: true,
+      startWithVideoMuted: true
+    },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS: ['microphone','camera','desktop','fullscreen','hangup']
+    },
+    userInfo: { displayName: state.username || 'Viewer' }
+  };
+  try{
+    jitsiApi = new JitsiMeetExternalAPI(domain, options);
+    if (f.jitsiPass) {
+      jitsiApi.addListener('videoConferenceJoined', () => jitsiApi.executeCommand('password', f.jitsiPass));
+      jitsiApi.addListener('passwordRequired',      () => jitsiApi.executeCommand('password', f.jitsiPass));
+    }
+  }catch(e){
+    showError('Errore init Jitsi: ' + (e?.message || e));
+    box.classList.add('hidden'); none.classList.remove('hidden');
+  }
+}
+
 function buildVdoViewUrl(id, pwd, label, rawUrl){
-  // Se è stato incollato un URL VDO completo, usalo direttamente
   if (rawUrl && /vdo\.ninja/.test(rawUrl)) {
     const u = new URL(rawUrl);
     u.searchParams.set('cleanoutput','1');
@@ -341,63 +397,90 @@ function buildVdoViewUrl(id, pwd, label, rawUrl){
     if (label) u.searchParams.set('label', label);
     return u.toString();
   }
-  // Altrimenti costruisci dal solo ID/Password
   const p = new URLSearchParams();
-  if (id)  p.set('view', id);        // alias "v"
-  if (pwd) { p.set('password', pwd); p.set('p', pwd); } // compat col formato dell'app
+  if (id)  p.set('view', id);
+  if (pwd) { p.set('password', pwd); p.set('p', pwd); }
   p.set('cleanoutput','1');
   p.set('autostart','1');
   p.set('embed','1');
   if (label) p.set('label', label);
   return `https://vdo.ninja/?${p.toString()}`;
 }
-function buildVdoPushUrl(id, pwd){
-  const p = new URLSearchParams();
-  if (id)  p.set('push', id);
-  if (pwd) p.set('password', pwd);
-  p.set('screenshare','1');  // condivisione schermo su telefono
-  p.set('autostart','1');
-  p.set('cleanish','1');
-  return `https://vdo.ninja/?${p.toString()}`;
+
+function startVdo(f){
+  destroyJitsi();
+  const box = document.getElementById('jitsiContainer');
+  const frame = document.getElementById('liveFrame');
+  const vid = document.getElementById('webrtcVideo');
+  const none = document.getElementById('noStream');
+
+  if (!f.vdoViewId && !/vdo\.ninja/.test(f.streamUrl||'')) {
+    showError('VDO.Ninja: View ID mancante.');
+    frame.classList.add('hidden'); box.classList.add('hidden'); vid.classList.add('hidden'); none.classList.remove('hidden');
+    return;
+  }
+  const url = buildVdoViewUrl(f.vdoViewId || '', f.vdoPassword || '', f.name || 'Live', f.streamUrl);
+  frame.src = url;
+  frame.classList.remove('hidden'); box.classList.add('hidden'); vid.classList.add('hidden'); none.classList.add('hidden');
 }
-function buildScreenStreamJoinUrl(id, pwd){
-  // apre il sito con i campi da compilare manualmente se non prende query
-  return `https://screenstream.io/`; // il form compare lì; i browser bloccheranno l'auto-compilazione cross origin
+
+async function startWhep(){ // stub: puoi re-implementare la tua WHEP join qui se riattivi un endpoint
+  const none = document.getElementById('noStream');
+  none.classList.remove('hidden');
+  setStatus('WHEP non configurato');
+  showError('WHEP disabilitato (usa Jitsi o VDO.Ninja).');
 }
 
 function updateLiveToolbar(){
   const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
-  $('#liveProvider').textContent = f?.provider === 'vdo' ? 'VDO.Ninja' : 'ScreenStream (sito)';
-  $('#liveSid').textContent = f?.streamUser || '—';
-  $('#livePwd').textContent = f?.streamPass || '—';
+  if(!f){ $('#liveProvider').textContent='—'; $('#liveSid').textContent='—'; $('#livePwd').textContent='—'; return; }
+  if (f.streamProvider === 'jitsi'){
+    $('#liveProvider').textContent = 'Jitsi';
+    $('#liveSid').textContent = f.jitsiRoom || '—';
+    $('#livePwd').textContent = f.jitsiPass || '—';
+  } else if (f.streamProvider === 'vdo'){
+    $('#liveProvider').textContent = 'VDO.Ninja';
+    $('#liveSid').textContent = f.vdoViewId || '—';
+    $('#livePwd').textContent = f.vdoPassword || '—';
+  } else {
+    $('#liveProvider').textContent = 'WHEP/Worker';
+    $('#liveSid').textContent = f.streamUser || '—';
+    $('#livePwd').textContent = f.streamPass || '—';
+  }
+}
+
+function openOnProvider(f) {
+  if (f.streamProvider === 'jitsi') {
+    const url = `https://${f.jitsiDomain||'meet.jit.si'}/${encodeURIComponent(f.jitsiRoom||'')}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } else if (f.streamProvider === 'vdo') {
+    const url = buildVdoViewUrl(f.vdoViewId||'', f.vdoPassword||'', f.name||'Live', f.streamUrl);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } else {
+    const url = f.streamUrl; if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  }
 }
 
 async function startLiveForCurrent(){
   const frame = $('#liveFrame'); const video = $('#webrtcVideo'); const none = $('#noStream');
-  frame.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden');
+  const jitsiBox = $('#jitsiContainer');
+  // reset visibilità
+  frame.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden'); jitsiBox.classList.add('hidden');
   setStatus(''); showError('');
-  await stopWhepResource(); cleanupWebRTC();
+  await stopWhepResource(); cleanupWebRTC(); destroyJitsi();
 
   const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
   if(!f){ showError('Nessuna filiale selezionata.'); return; }
   updateLiveToolbar();
 
-  if (f.provider === 'vdo'){
-    const url = buildVdoViewUrl(f.streamUser, f.streamPass, f.name, f.streamUrl);
-    frame.src = url;
-    frame.classList.remove('hidden');
-    none.classList.add('hidden');
-    setStatus('VDO.Ninja embed');
-    return;
+  if (f.streamProvider === 'vdo'){
+    startVdo(f); setStatus('VDO.Ninja'); return;
   }
-
-  // Provider: screenstream (solo sito esterno). Dentro il riquadro lasciamo un messaggio.
-  none.classList.remove('hidden');
-  none.innerHTML = `<div class="text-center text-sm text-slate-300">
-    Usa il pulsante <b>Apri sito live</b> per aprire screenstream.io in nuova scheda.<br/>
-    ID: <span class="font-mono">${f.streamUser||'—'}</span> · Password: <span class="font-mono">${f.streamPass||'—'}</span>
-  </div>`;
-  setStatus('ScreenStream (apri in nuova scheda)');
+  if (f.streamProvider === 'jitsi') {
+    startJitsi(f); setStatus('Jitsi Meet'); return;
+  }
+  // whep
+  startWhep();
 }
 
 /**************** CHECK/UX ****************/
@@ -413,9 +496,7 @@ function runCheckFiliali(){
   (state.filiali||[]).forEach(filiale=>{
     const row = el(`<div class="flex items-center justify-between text-sm">
       <div class="w-56 truncate text-slate-300">${filiale.name}</div>
-      <div class="flex items-center gap-3">
-        <div class="text-xs text-slate-400" id="stat-${filiale.id}">—</div>
-      </div>
+      <div class="flex items-center gap-3"><div class="text-xs text-slate-400" id="stat-${filiale.id}">—</div></div>
     </div>`);
     const rows = state.history[filiale.id] || [];
     const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
@@ -433,20 +514,24 @@ function uiRenderFilialiDesc(){
     const rows = state.history[filiale.id] || [];
     const hasActive = computeFilialeHasActiveAlarm(filiale.id);
     const last = rows.length ? rows.slice().sort((a,b)=>b.date-a.date)[0] : null;
+    let cred = '';
+    if (filiale.streamProvider === 'jitsi')
+      cred = `Room: <code>${filiale.jitsiRoom||'—'}</code> · Pass: <code>${filiale.jitsiPass||'—'}</code>`;
+    else if (filiale.streamProvider === 'vdo')
+      cred = `View: <code>${filiale.vdoViewId||'—'}</code> · Pass: <code>${filiale.vdoPassword||'—'}</code>`;
+    else
+      cred = `Endpoint: <code>${(filiale.streamUrl||'').replace(/^https?:\/\//,'').replace(/\/.*/,'')||'—'}</code>`;
     const card = el(`<div class="glass rounded-xl p-3">
       <div class="flex items-center gap-3">
         <div class="flex-1 min-w-0">
           <div class="font-medium text-slate-200 truncate">${filiale.name}</div>
-          <div class="text-xs text-slate-400 mt-1">
-            Provider: <b>${filiale.provider==='vdo'?'VDO.Ninja':'ScreenStream (sito)'}</b>
-            · ID: <span class="font-mono">${filiale.streamUser||'—'}</span>
-            · Password: <span class="font-mono">${filiale.streamPass||'—'}</span>
-          </div>
+          <div class="text-xs text-slate-400 mt-1">${cred}</div>
         </div>
         <div>${hasActive
           ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
           : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>'}</div>
         <button class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
+        <button class="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-xs" data-open-provider="${filiale.id}">Apri su Provider</button>
       </div>
       ${last? `<div class="text-xs text-slate-500 mt-1">Ultimo evento: ${fmtDate(new Date(last.date))}</div>`:''}
     </div>`);
@@ -455,6 +540,7 @@ function uiRenderFilialiDesc(){
       startLiveForCurrent();
       document.getElementById('liveStreamBox')?.scrollIntoView({behavior:'smooth', block:'center'});
     });
+    card.querySelector('[data-open-provider]').addEventListener('click', ()=> openOnProvider(filiale));
     wrap.appendChild(card);
   });
 }
@@ -518,7 +604,7 @@ function renderImpostazioni(){
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-9 gap-3 items-end">
+      <div class="grid md:grid-cols-10 gap-3 items-end">
         <label class="block text-sm text-slate-300">Nome
           <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
         </label>
@@ -526,28 +612,49 @@ function renderImpostazioni(){
           <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
         </label>
         <label class="block text-sm text-slate-300">Provider
-          <select data-k="provider" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
-            <option ${f.provider==='vdo'?'selected':''} value="vdo">VDO.Ninja (iframe)</option>
-            <option ${f.provider==='ssite'?'selected':''} value="ssite">ScreenStream (sito esterno)</option>
+          <select data-k="streamProvider" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
+            <option value="jitsi" ${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
+            <option value="vdo" ${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
+            <option value="whep" ${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
           </select>
         </label>
-        <label class="block text-sm text-slate-300">URL (solo ScreenStream se necessario)
-          <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" placeholder="https://screenstream.io/" />
-        </label>
-        <label class="block text-sm text-slate-300">ID live
-          <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
-        </label>
-        <label class="block text-sm text-slate-300">Password live
-          <input data-k="streamPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
-        </label>
-        <label class="flex items-center gap-2 text-sm text-slate-300 mt-7">
-          <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
-          Audio (se supportato)
-        </label>
+        <div data-group="jitsi" style="${f.streamProvider==='jitsi'?'':'display:none'}" class="col-span-3">
+          <label class="block text-sm text-slate-300">Jitsi domain
+            <input data-k="jitsiDomain" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiDomain||'meet.jit.si'}" />
+          </label>
+          <label class="block text-sm text-slate-300">Room
+            <input data-k="jitsiRoom" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiRoom||''}" />
+          </label>
+          <label class="block text-sm text-slate-300">Password (visibile)
+            <input data-k="jitsiPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiPass||''}" />
+          </label>
+        </div>
+        <div data-group="vdo" style="${f.streamProvider==='vdo'?'':'display:none'}" class="col-span-2">
+          <label class="block text-sm text-slate-300">VDO View ID
+            <input data-k="vdoViewId" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoViewId||''}" />
+          </label>
+          <label class="block text-sm text-slate-300">VDO Password
+            <input data-k="vdoPassword" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoPassword||''}" />
+          </label>
+        </div>
+        <div data-group="whep" style="${f.streamProvider==='whep'?'':'display:none'}" class="col-span-3">
+          <label class="block text-sm text-slate-300">URL WHEP (HTTPS)
+            <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" />
+          </label>
+          <label class="block text-sm text-slate-300">ID
+            <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
+          </label>
+          <label class="block text-sm text-slate-300">Password
+            <input data-k="streamPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
+          </label>
+          <label class="flex items-center gap-2 text-sm text-slate-300 mt-2">
+            <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
+            Audio (se supportato)
+          </label>
+        </div>
         <div class="flex gap-2 mt-7">
           <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri live</button>
-          <button data-act="site" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri sito live</button>
-          <button data-act="push" class="px-3 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-600">Apri link PUSH (telefono)</button>
+          <button data-act="provider" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri su Provider</button>
         </div>
         <div class="flex gap-2 mt-7 justify-end">
           <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
@@ -555,6 +662,14 @@ function renderImpostazioni(){
         </div>
       </div>
     </div>`);
+
+    // Provider switcher
+    card.querySelector('[data-k="streamProvider"]').addEventListener('change', (e)=>{
+      const v = e.target.value;
+      card.querySelector('[data-group="jitsi"]').style.display = v==='jitsi' ? '' : 'none';
+      card.querySelector('[data-group="vdo"]').style.display   = v==='vdo'   ? '' : 'none';
+      card.querySelector('[data-group="whep"]').style.display  = v==='whep'  ? '' : 'none';
+    });
 
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
       card.querySelectorAll('[data-k]').forEach(inp=>{
@@ -574,19 +689,7 @@ function renderImpostazioni(){
     card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
       $('#filialeSelect').value = f.id; startLiveForCurrent(); go('home');
     });
-    card.querySelector('[data-act="site"]').addEventListener('click', ()=>{
-      if (f.provider==='vdo'){
-        window.open(buildVdoViewUrl(f.streamUser, f.streamPass, f.name), '_blank', 'noopener');
-      } else {
-        window.open(buildScreenStreamJoinUrl(f.streamUser, f.streamPass), '_blank', 'noopener');
-      }
-    });
-    card.querySelector('[data-act="push"]').addEventListener('click', ()=>{
-      const url = (f.provider==='vdo')
-        ? buildVdoPushUrl(f.streamUser, f.streamPass)
-        : buildScreenStreamJoinUrl(f.streamUser, f.streamPass);
-      window.open(url, '_blank', 'noopener');
-    });
+    card.querySelector('[data-act="provider"]').addEventListener('click', ()=> openOnProvider(f));
 
     list.appendChild(card);
   });
@@ -635,10 +738,6 @@ function renderStorico(){
     wrap.appendChild(section);
   }
 }
-
-/**************** ====== (solo se userai di nuovo WHEP) ====== ****************/
-/* Lasciamo gli stub per completezza: non usati con provider 'vdo' */
-async function startWhep(){ showError('WHEP disabilitato (usa provider VDO.Ninja).'); }
 
 /**************** AUTH (gapi + GIS) ****************/
 async function waitForGapiLoad(maxMs = 10000){
@@ -736,14 +835,14 @@ async function fetchAlarms(){
     })(msg.payload);
 
     let status = inferStatusSmart(subject, body);
-    if(!status) continue;
-
     const { temp, min, max } = parseTemperatures(subject, body);
 
-    // Se è stato segnalato come allarme ma la temperatura è nel range -> OK (false positive)
-    if(status==='alto' && isFinite(temp) && isFinite(min) && isFinite(max) && temp>=min && temp<=max){
+    // Se è segnalato come allarme ma la temperatura è nel range, forza OK
+    if(status==='alto' && isFinite(temp) && isFinite(min) && isFinite(max) && min <= temp && temp <= max){
       status = 'ok';
     }
+
+    if(!status) continue;
 
     const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
     const low = (subject+'\n'+body).toLowerCase();
@@ -806,13 +905,10 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   $('#btnOpenProvider').addEventListener('click', ()=>{
     const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
     if(!f) return;
-    const url = (f.provider==='vdo')
-      ? buildVdoViewUrl(f.streamUser, f.streamPass, f.name)
-      : buildScreenStreamJoinUrl(f.streamUser, f.streamPass);
-    window.open(url,'_blank','noopener');
+    openOnProvider(f);
   });
-  $('#btnCopySid').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); copyTxt(f?.streamUser||''); });
-  $('#btnCopyPwd').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); copyTxt(f?.streamPass||''); });
+  $('#btnCopySid').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); if(!f) return; const id = (f.streamProvider==='jitsi')?f.jitsiRoom:(f.streamProvider==='vdo'?f.vdoViewId:f.streamUser); copyTxt(id||''); });
+  $('#btnCopyPwd').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); if(!f) return; const pw = (f.streamProvider==='jitsi')?f.jitsiPass:(f.streamProvider==='vdo'?f.vdoPassword:f.streamPass); copyTxt(pw||''); });
 
   // Profilo & filiali
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
@@ -821,7 +917,12 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       id: (crypto?.randomUUID?.() || ('f'+Date.now())),
       name: 'Nuova filiale',
       email: 'allarmi@edilrepairs.ch',
-      provider: 'vdo',
+      streamProvider: 'jitsi',
+      jitsiDomain: 'meet.jit.si',
+      jitsiRoom: '',
+      jitsiPass: '',
+      vdoViewId: '',
+      vdoPassword: '',
       streamUrl: '',
       streamUser: '',
       streamPass: '',
@@ -863,7 +964,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   startLiveForCurrent();
 
   // cleanup (se un domani userai WHEP)
-  window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); });
+  window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); destroyJitsi(); });
 });
 </script>
 </body>
