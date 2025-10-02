@@ -166,12 +166,6 @@
       <!-- Sidebar -->
       <div class="w-full md:w-64 flex-shrink-0">
         <div class="glass rounded-2xl mb-6">
-          <!-- Loghi -->
-          <div class="sidebar-logos">
-            <img class="logo-img site-logo" id="sidebarSiteLogo" src="" alt="Logo sito" />
-            <img class="logo-img dev-logo" id="sidebarDevLogo" src="" alt="Logo sviluppatore" />
-          </div>
-          
           <!-- Indicatore stato Gmail -->
           <div class="gmail-status" title="Stato Gmail">
             <span class="dot" aria-hidden="true"></span>
@@ -249,7 +243,6 @@
                   <div class="font-medium tracking-wide mb-2">Check filiali</div>
                   <div id="checkFilialiRows" class="space-y-2"></div>
                 </div>
-
                 <div class="glass rounded-2xl p-5 space-y-3">
                   <div class="font-medium tracking-wide mb-2">Filiali & stato</div>
                   <div id="filialiDescWrap" class="space-y-2"></div>
@@ -294,26 +287,6 @@
               </div>
             </div>
 
-            <!-- Branding / loghi -->
-            <div class="glass rounded-2xl p-5">
-              <div class="font-medium mb-3">Branding & loghi</div>
-              <div class="grid sm:grid-cols-2 gap-4">
-                <label class="block text-sm text-slate-300">Logo sito (URL)
-                  <input id="logoUrlInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://.../logo.png" />
-                </label>
-                <label class="block text-sm text-slate-300">Logo icona / Favicon (URL)
-                  <input id="iconUrlInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://.../icon.png" />
-                </label>
-                <label class="block text-sm text-slate-300">Logo sviluppatore (URL)
-                  <input id="devLogoUrlInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://.../dev-logo.svg" />
-                </label>
-                <div class="text-xs text-slate-400 sm:col-span-2">Suggerimento: usa immagini HTTPS e leggere (PNG/SVG).</div>
-              </div>
-              <div class="mt-3">
-                <button id="btnSaveBranding" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva loghi</button>
-              </div>
-            </div>
-
             <!-- Impostazioni Filiali -->
             <div class="glass rounded-2xl p-5">
               <div class="flex items-center justify-between">
@@ -327,7 +300,6 @@
                 <b>WHEP/Worker</b> = solo se riattivi un endpoint compatibile.
               </div>
             </div>
-
             <div class="text-xs text-slate-500">Le impostazioni sono salvate nel tuo browser (LocalStorage).</div>
           </section>
         </main>
@@ -379,6 +351,17 @@
           <button id="advReset" class="px-3 py-2 rounded-lg bg-red-700/80 hover:bg-red-600/80">Reset LocalStorage</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Report IA -->
+  <div id="aiReportModal" class="overlay">
+    <div class="glass rounded-2xl p-6 w-[min(760px,92vw)]">
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-lg font-medium">Report IA — ultime 24 ore</div>
+        <button id="aiReportClose" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Chiudi</button>
+      </div>
+      <pre id="aiReportBody" class="whitespace-pre-wrap text-sm text-slate-200 leading-6"></pre>
     </div>
   </div>
 
@@ -769,6 +752,7 @@ function uiRenderFilialiDesc(){
           : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>'}</div>
         <button class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
         <button class="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-xs" data-open-provider="${filiale.id}">Apri su Provider</button>
+        <button class="px-2 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-xs" data-ai-report="${filiale.id}">Report IA</button>
       </div>
       ${last? `<div class="text-xs text-slate-500 mt-1">Ultimo evento: ${fmtDate(new Date(last.date))}</div>`:''}
     </div>`);
@@ -778,6 +762,7 @@ function uiRenderFilialiDesc(){
       document.getElementById('liveStreamBox')?.scrollIntoView({behavior:'smooth', block:'center'});
     });
     card.querySelector('[data-open-provider]').addEventListener('click', ()=> openOnProvider(filiale));
+    card.querySelector('[data-ai-report]').addEventListener('click', ()=> openAIReport(filiale.id, filiale.name));
     wrap.appendChild(card);
   });
 }
@@ -946,64 +931,69 @@ function renderImpostazioni(){
   const list = $('#filialiList'); list.innerHTML = '';
   (state.filiali||[]).forEach(f=>{
     const card = el(`<div class="glass rounded-xl p-3">
-      <div class="grid md:grid-cols-10 gap-3 items-end">
-        <label class="block text-sm text-slate-300">Nome
-          <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
-        </label>
-        <label class="block text-sm text-slate-300">Email storico
-          <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
-        </label>
-        <label class="block text-sm text-slate-300">Provider
-          <select data-k="streamProvider" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
-            <option value="jitsi" ${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
-            <option value="vdo" ${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
-            <option value="whep" ${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
-          </select>
-        </label>
-        <div data-group="jitsi" style="${f.streamProvider==='jitsi'?'':'display:none'}" class="col-span-3">
-          <label class="block text-sm text-slate-300">Jitsi domain
-            <input data-k="jitsiDomain" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiDomain||'meet.jit.si'}" />
-          </label>
-          <label class="block text-sm text-slate-300">Room
-            <input data-k="jitsiRoom" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiRoom||''}" />
-          </label>
-          <label class="block text-sm text-slate-300">Password (visibile)
-            <input data-k="jitsiPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiPass||''}" />
-          </label>
-        </div>
-        <div data-group="vdo" style="${f.streamProvider==='vdo'?'':'display:none'}" class="col-span-2">
-          <label class="block text-sm text-slate-300">VDO View ID
-            <input data-k="vdoViewId" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoViewId||''}" />
-          </label>
-          <label class="block text-sm text-slate-300">VDO Password
-            <input data-k="vdoPassword" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoPassword||''}" />
-          </label>
-        </div>
-        <div data-group="whep" style="${f.streamProvider==='whep'?'':'display:none'}" class="col-span-3">
-          <label class="block text-sm text-slate-300">URL WHEP (HTTPS)
-            <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" />
-          </label>
-          <label class="block text-sm text-slate-300">ID
-            <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
-          </label>
-          <label class="block text-sm text-slate-300">Password
-            <input data-k="streamPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-300 mt-2">
-            <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500">
-            Audio (se supportato)
-          </label>
-        </div>
-        <div class="flex gap-2 mt-7">
-          <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri live</button>
-          <button data-act="provider" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri su Provider</button>
-        </div>
-        <div class="flex gap-2 mt-7 justify-end">
-          <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
-          <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
-        </div>
+  <div class="grid md:grid-cols-12 gap-3 items-start">
+    <label class="block text-sm text-slate-300 md:col-span-3">Nome
+      <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
+    </label>
+    <label class="block text-sm text-slate-300 md:col-span-3">Email storico
+      <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
+    </label>
+    <label class="block text-sm text-slate-300 md:col-span-2">Provider
+      <select data-k="streamProvider" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
+        <option value="jitsi" ${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
+        <option value="vdo" ${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
+        <option value="whep" ${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
+      </select>
+    </label>
+
+    <div data-group="jitsi" class="md:col-span-4" style="${f.streamProvider==='jitsi'?'':'display:none'}">
+      <label class="block text-sm text-slate-300">Jitsi domain
+        <input data-k="jitsiDomain" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiDomain||'meet.jit.si'}" />
+      </label>
+      <label class="block text-sm text-slate-300">Room
+        <input data-k="jitsiRoom" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiRoom||''}" />
+      </label>
+      <label class="block text-sm text-slate-300">Password (visibile)
+        <input data-k="jitsiPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiPass||''}" />
+      </label>
+    </div>
+
+    <div data-group="vdo" class="md:col-span-3" style="${f.streamProvider==='vdo'?'':'display:none'}">
+      <label class="block text-sm text-slate-300">VDO View ID
+        <input data-k="vdoViewId" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoViewId||''}" />
+      </label>
+      <label class="block text-sm text-slate-300">VDO Password
+        <input data-k="vdoPassword" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoPassword||''}" />
+      </label>
+    </div>
+
+    <div data-group="whep" class="md:col-span-4" style="${f.streamProvider==='whep'?'':'display:none'}">
+      <label class="block text-sm text-slate-300">URL WHEP (HTTPS)
+        <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" />
+      </label>
+      <label class="block text-sm text-slate-300">ID
+        <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
+      </label>
+      <label class="block text-sm text-slate-300">Password
+        <input data-k="streamPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
+      </label>
+      <label class="flex items-center gap-2 text-sm text-slate-300 mt-2">
+        <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500"> Audio (se supportato)
+      </label>
+    </div>
+
+    <div class="md:col-span-12 flex flex-wrap gap-2 justify-between mt-1">
+      <div class="flex gap-2">
+        <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri live</button>
+        <button data-act="provider" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri su Provider</button>
       </div>
-    </div>`);
+      <div class="flex gap-2">
+        <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
+        <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
+      </div>
+    </div>
+  </div>
+</div>`);
 
     // Provider switcher
     card.querySelector('[data-k="streamProvider"]').addEventListener('change', (e)=>{
@@ -1012,7 +1002,6 @@ function renderImpostazioni(){
       card.querySelector('[data-group="vdo"]').style.display   = v==='vdo'   ? '' : 'none';
       card.querySelector('[data-group="whep"]').style.display  = v==='whep'  ? '' : 'none';
     });
-
     card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
       card.querySelectorAll('[data-k]').forEach(inp=>{
         const k = inp.dataset.k;
@@ -1032,7 +1021,6 @@ function renderImpostazioni(){
       $('#filialeSelect').value = f.id; startLiveForCurrent(); go('home');
     });
     card.querySelector('[data-act="provider"]').addEventListener('click', ()=> openOnProvider(f));
-
     list.appendChild(card);
   });
 }
@@ -1069,19 +1057,17 @@ function initGIS(){
     callback: (resp)=>{ if (resp?.access_token){ gapi.client.setToken({ access_token: resp.access_token }); gmailReady = true; } }
   });
 }
-function signOut(){ try{ const tok = gapi?.client?.getToken?.(); if (tok?.access_token) google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{}); gapi?.client?.setToken?.(null);}catch{} gmailReady = false; }
-function signIn(){
-  return new Promise( async (resolve, reject)=>{
-    try{
-      if (!window.gapi?.client) { await initGapi(); }
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return reject(new Error('CLIENT_ID mancante')); }
-      if (!window.tokenClient) { initGIS(); }
-      try{ window.google?.accounts?.id?.disableAutoSelect?.(); }catch{}
-      try{ const tok = window.gapi?.client?.getToken?.(); if (tok?.access_token) window.google?.accounts?.oauth2?.revoke?.(tok.access_token, ()=>{}); window.gapi?.client?.setToken?.(null);}catch{}
-      window.tokenClient.callback = (r)=> r?.access_token ? resolve(r) : reject(r);
-      window.tokenClient.requestAccessToken({ prompt: 'consent select_account', include_granted_scopes: false, hint: cfg.LOGIN_HINT || undefined });
-    }catch(e){ reject(e); }
-  });
+
+// Gmail silent sign-in
+async function trySilentSignIn() {
+  try {
+    if (!window.gapi?.client) await initGapi();
+    if (!window.tokenClient) initGIS();
+    return await new Promise((resolve, reject) => {
+      tokenClient.callback = (r) => r?.access_token ? resolve(r) : reject(r);
+      tokenClient.requestAccessToken({ prompt: '', hint: cfg.LOGIN_HINT || 'resinellialimentari@gmail.com' });
+    });
+  } catch (_) { return null; }
 }
 
 /**************** GMAIL: parsing (allarme ma temp nel range = OK) ****************/
@@ -1217,6 +1203,13 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   loadState();
   populateFilialeSelect();
 
+  try {
+    await initGapi();
+    initGIS();
+    const r = await trySilentSignIn();
+    if (r?.access_token) { await fetchAlarms(); }
+  } catch (_) { /* se fallisce resta il bottone Accedi */ }
+
   document.querySelectorAll('.route-btn').forEach(b=> b.addEventListener('click', ()=> go(b.dataset.route.slice(1))));
   const initial = (location.hash || '#home'); setActiveTab(initial); go((initial||'#home').slice(1));
 
@@ -1305,8 +1298,6 @@ window.addEventListener('DOMContentLoaded', async ()=>{
 
   // Avvia live
   startLiveForCurrent();
-
-  // Avvia polling Gmail
   startGmailPolling();
 
   // cleanup
