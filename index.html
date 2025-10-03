@@ -1,178 +1,138 @@
 <!DOCTYPE html>
-<html lang="it" data-theme="light">
+<html lang="it" data-theme="auto">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Resinelli Monitor</title>
 
-  <!-- Favicon dinamica (se impostata nelle impostazioni, verrà aggiornata via JS) -->
+  <!-- Favicon dinamica -->
   <link id="dynamic-favicon" rel="icon" href="data:," />
 
-  <!-- Tailwind (CDN) -->
+  <!-- Tailwind (CDN, OK per dev. In prod: usare CLI/PostCSS) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Identity Services -->
+
+  <!-- Google Identity Services + Gmail API -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Google API Client (Gmail) -->
   <script src="https://apis.google.com/js/api.js" async defer></script>
+
   <!-- Jitsi Meet IFrame API -->
   <script src="https://meet.jit.si/external_api.js"></script>
 
+  <script>
+    /* Tailwind config (temi) */
+    tailwind.config = {
+      darkMode: ["class", '[data-theme="dark"]'],
+      theme: {
+        extend: {
+          colors: {
+            bgd1: "#0b1220",
+            bgd2: "#0f1a2c",
+            bgl1: "#f8fafc",
+            bgl2: "#eef2ff",
+            acc:  "#93c5fd",
+            acc2: "#22d3ee",
+          },
+          boxShadow: {
+            glass: "0 8px 30px rgba(0,0,0,.25)"
+          },
+          keyframes: {
+            scan: {
+              "0%": { transform: "translateX(-100%)" },
+              "60%": { transform: "translateX(100%)" },
+              "100%": { transform: "translateX(100%)" }
+            },
+            fade: { "0%": {opacity:0}, "100%": {opacity:1} },
+            slide: { "0%": {transform:"translateY(6px)", opacity:.0}, "100%":{transform:"translateY(0)", opacity:1} },
+            pulseSoft: { "0%,100%":{opacity:.7}, "50%":{opacity:1} }
+          },
+          animation: {
+            scan: "scan 2.2s infinite",
+            fade: "fade .25s ease both",
+            slide: "slide .3s ease both",
+            pulseSoft: "pulseSoft 2s ease-in-out infinite"
+          },
+        }
+      }
+    }
+  </script>
+
   <style>
-    :root{ --bg1:#0b1220; --bg2:#0f1a2c; --acc:#93c5fd; --acc2:#22d3ee; --live-h:75svh }
-    html,body{ height:100% }
-    body{
+    :root{
+      --live-h: 75svh;
+    }
+    html,body{height:100%}
+    body[data-theme="dark"], [data-theme="dark"] body {
       background:
         radial-gradient(1000px 520px at 15% -10%, rgba(147,197,253,.15), transparent),
         radial-gradient(900px 520px at 100% 0%, rgba(34,211,238,.12), transparent),
-        linear-gradient(180deg, var(--bg1), var(--bg2));
-      color:#e5e7eb;
+        linear-gradient(180deg, #0b1220, #0f1a2c);
+      color: #e5e7eb;
     }
-    .glass{ background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
-            backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.08) }
-    .brand-grad{ background:linear-gradient(90deg,var(--acc),var(--acc2)); }
-    .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
+    body[data-theme="light"]{
+      background: linear-gradient(180deg, #f8fafc, #eef2ff);
+      color: #0f172a;
+    }
+    .brand-grad{ background:linear-gradient(90deg, var(--tw-color-acc, #93c5fd), var(--tw-color-acc2, #22d3ee)); }
+    .glass {
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    [data-theme="light"] .glass{
+      background: rgba(255,255,255,.75);
+      border: 1px solid rgba(15,23,42,.06);
+    }
     .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
     .stream-media, .stream-frame{ width:100%; height:100%; object-fit:contain; background:#000; border:0 }
+    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:70 }
+    .overlay.show{ display:flex }
     .scanbar{ position:relative; overflow:hidden }
     .scanbar::after{ content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent); transform:translateX(-100%); animation:scan 2.2s infinite }
-    @keyframes scan{ 0%{transform:translateX(-100%)} 60%{transform:translateX(100%)} 100%{transform:translateX(100%)} }
-    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50 }
-    .overlay.show{ display:flex }
-    #rowModalBody{ background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0 }
-    .tab-btn{ border-bottom:2px solid transparent }
-    .tab-btn.active{ color:#fff; border-color:var(--acc2) }
-    .badge {
-      display: inline-flex; align-items: center; gap: 0.25em;
-      padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: 600;
-      background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0;
-      transition: background .2s;
-    }
-    .badge-success {
-      background: #e0f2fe; color: #0e7490; border-color: #bae6fd;
-    }
-    .badge-danger {
-      background: #fee2e2; color: #b91c1c; border-color: #fecaca;
-    }
-    .badge-warning {
-      background: #fef9c3; color: #92400e; border-color: #fde68a;
-    }
-    [data-theme="dark"] .badge {
-      background: #1e293b; color: #e0e7ef; border-color: #334155;
-    }
-    [data-theme="dark"] .badge-success {
-      background: #0e7490; color: #e0f2fe; border-color: #334155;
-    }
-    [data-theme="dark"] .badge-danger {
-      background: #b91c1c; color: #fee2e2; border-color: #334155;
-    }
-    [data-theme="dark"] .badge-warning {
-      background: #92400e; color: #fef9c3; border-color: #334155;
-    }
-    .focus-ring:focus {
-      outline: none;
-      box-shadow: 0 0 0 2px #2563eb50;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *:before, *:after { transition: none !important; animation-duration: 0s !important; }
-    }
-    html,body{ height:100% }
-    body{
-      background:
-        radial-gradient(1000px 520px at 15% -10%, rgba(147,197,253,.15), transparent),
-        radial-gradient(900px 520px at 100% 0%, rgba(34,211,238,.12), transparent),
-        linear-gradient(180deg, var(--bg1), var(--bg2));
-      color:#e5e7eb;
-    }
-    .glass{ background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
-            backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.08) }
-    .brand-grad{ background:linear-gradient(90deg,var(--acc),var(--acc2)); }
-    .stream-outer{ display:grid; grid-template-rows:auto 1fr; gap:.75rem; padding-bottom:.5rem; overflow:visible }
-    .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid rgba(255,255,255,.1); border-radius:14px; overflow:hidden }
-    .stream-media, .stream-frame{ width:100%; height:100%; object-fit:contain; background:#000; border:0 }
-    .scanbar{ position:relative; overflow:hidden }
-    .scanbar::after{ content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent); transform:translateX(-100%); animation:scan 2.2s infinite }
-    @keyframes scan{ 0%{transform:translateX(-100%)} 60%{transform:translateX(100%)} 100%{transform:translateX(100%)} }
-    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50 }
-    .overlay.show{ display:flex }
-    #rowModalBody{ background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02)); border-radius:18px; box-shadow:0 2px 32px #0008; padding:2rem; min-width:320px; max-width:96vw; color:#e2e8f0 }
-    .tab-btn{ border-bottom:2px solid transparent }
-    .tab-btn.active{ color:#fff; border-color:var(--acc2) }
-    .icon-24 { width:24px; height:24px; display:inline-block; vertical-align:middle }
-    .icon-muted { opacity:.8 }
-    .icon-avatar {
-      width: 32px; height: 32px; border-radius: 9999px;
-      background: linear-gradient(135deg, #3b82f6, #06b6d4);
-      display: flex; align-items: center; justify-content: center;
-    }
-    /* Mobile responsive improvements */
-    @media (max-width: 768px) {
-      .sidebar-logos {
-        flex-direction: row;
-        justify-content: space-between;
-        padding: 12px;
-      }
-      
-      .logo-img {
-        max-height: 40px;
-      }
-      
-      .gmail-status {
-        padding: 8px 12px;
-        font-size: 0.85rem;
-      }
-      
-      .live-toolbar {
-        flex-wrap: wrap;
-        height: auto;
-        padding: 8px;
-      }
-      
-      .live-toolbar > div {
-        font-size: 0.75rem;
-      }
-      
-      .live-toolbar .ml-auto {
-        margin-left: 0;
-        width: 100%;
-        justify-content: flex-end;
-        margin-top: 4px;
-      }
+
+    /* Skeleton */
+    .skeleton{ position:relative; overflow:hidden; }
+    .skeleton::before{
+      content:""; position:absolute; inset:0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+      transform: translateX(-100%); animation: scan 1.6s infinite;
     }
 
-    /* Stampa */
+    /* Print */
     @media print{
-      header, #advModal, #rowModal, nav, #statusBar, #route-impostazioni, #btnExportCsv, #btnPrint, #filterRangeWrap { display:none !important; }
-      body{ background:#fff; color:#000; }
-      .glass{ background:#fff; border:none; }
+      header, nav, #advModal, #rowModal, #aiReportModal, #statusBar, #route-impostazioni, #btnExportCsv, #btnPrint, #filterRangeWrap { display:none !important; }
+      body{ background:#fff !important; color:#000 !important; }
+      .glass{ background:#fff !important; border:none !important; box-shadow:none !important; }
       .print-footer{ position:fixed; bottom:0; left:0; right:0; font-size:12px; padding:8px 16px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ccc; }
       .print-logos img{ max-height:22px; }
+      .print-kpis{ page-break-inside: avoid; }
     }
   </style>
 </head>
 <body class="min-h-screen selection:bg-sky-300/40 selection:text-sky-950">
-  <!-- TOP BAR -->
-  <header class="glass sticky top-0 z-40">
+
+  <!-- ========== TOP BAR ========== -->
+  <header class="glass sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
       <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div class="flex items-center gap-3">
           <div id="brandLogoBox" class="h-9 w-9 rounded-lg overflow-hidden grid place-items-center brand-grad">
-            <!-- Se logo impostato, viene mostrata un'immagine -->
             <img id="brandLogoImg" class="hidden h-full w-full object-cover" alt="Logo sito">
           </div>
           <div>
             <div class="text-lg font-semibold tracking-wide">Resinelli Monitor</div>
-            <div class="text-[12px] text-slate-400 -mt-0.5">Celle frigo · live & storico</div>
+            <div class="text-[12px] opacity-70 -mt-0.5">Celle frigo · live & storico</div>
           </div>
         </div>
-        <nav class="flex items-center gap-4">
-          <button data-route="#home" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Home</button>
-          <button data-route="#storico" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Storico</button>
-          <button data-route="#impostazioni" class="tab-btn route-btn px-1 py-2 text-slate-300 hover:text-white">Impostazioni</button>
+        <nav class="flex items-center gap-1">
+          <button data-route="#home" class="tab-btn px-3 py-2 rounded-lg hover:bg-white/10">Home</button>
+          <button data-route="#storico" class="tab-btn px-3 py-2 rounded-lg hover:bg-white/10">Storico</button>
+          <button data-route="#impostazioni" class="tab-btn px-3 py-2 rounded-lg hover:bg-white/10">Impostazioni</button>
         </nav>
         <div class="flex items-center gap-2">
-          <button id="btnAdvanced" class="px-2 py-2 rounded-lg bg-slate-800 hover:bg-slate-700" title="Impostazioni avanzate" aria-label="Impostazioni avanzate">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-width="1.5" d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 1 0 12 8.5z"/><path stroke-width="1.5" d="M19.4 15a7.8 7.8 0 0 0 .1-6l2-1.2-2-3.5-2.2 1a8 8 0 0 0-5.6-2l-.4-2.4H9.7L9.3 3a8 8 0 0 0-5.6 2l-2.2-1-2 3.5 2 1.2a7.8 7.8 0 0 0 0 6l-2 1.2 2 3.5 2.2-1a8 8 0 0 0 5.6 2l.4 2.4h3.2l.4-2.4a8 8 0 0 0 5.6-2l2.2 1 2-3.5-2-1.2z"/></svg>
+          <button id="themeToggle" class="px-2 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100" title="Tema chiaro/scuro" aria-label="Tema">
+            <span id="themeIcon">🌙</span>
           </button>
+          <button id="btnAdvanced" class="px-2 py-2 rounded-lg bg-slate-800 hover:bg-slate-700" title="Impostazioni avanzate" aria-label="Impostazioni avanzate">⚙️</button>
           <button id="btnSignIn" class="px-3 py-2 rounded-lg brand-grad text-slate-900 font-medium shadow-md hover:opacity-90">Accedi a Gmail</button>
           <button id="btnChangeAccount" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Cambia account</button>
         </div>
@@ -180,191 +140,228 @@
     </div>
   </header>
 
-  <!-- SIDEBAR -->
+  <!-- ========== LAYOUT ========== -->
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="flex flex-col md:flex-row gap-6">
+
       <!-- Sidebar -->
-      <div class="w-full md:w-64 flex-shrink-0">
-        <div class="glass rounded-2xl mb-6">
-          <!-- Indicatore stato Gmail -->
-          <div class="gmail-status" title="Stato Gmail">
-            <span class="dot" aria-hidden="true"></span>
+      <aside class="w-full md:w-64 flex-shrink-0">
+        <div class="glass rounded-2xl mb-6 p-4 space-y-4">
+          <!-- Logos -->
+          <div class="flex items-center justify-between">
+            <img id="sidebarSiteLogo" class="max-h-10 object-contain" alt="Logo sito"/>
+            <img id="sidebarDevLogo" class="max-h-10 object-contain" alt="Logo dev"/>
+          </div>
+          <!-- Gmail status -->
+          <div class="gmail-status flex items-center gap-3 text-sm">
+            <span class="dot inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
             <span id="gmail-status-text">Gmail</span>
           </div>
+          <!-- Quick stats -->
+          <div class="text-xs opacity-70" id="quickStats">
+            Nessun dato ancora. Accedi a Gmail per sincronizzare.
+          </div>
         </div>
-      </div>
+      </aside>
 
-      <!-- Main Content -->
-      <div class="flex-1">
-        <!-- PAGE -->
-        <main class="py-6 space-y-8">
-          <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div>
-              <div class="text-3xl font-semibold" id="pageTitle">Home</div>
-              <div class="text-sm text-slate-400">Monitor live e ultimi allarmi per filiale</div>
+      <!-- Main -->
+      <main class="flex-1 py-6 space-y-8">
+
+        <!-- Header pagina + selettore filiale -->
+        <section class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 animate-fade">
+          <div>
+            <div class="text-3xl font-semibold" id="pageTitle">Home</div>
+            <div class="text-sm opacity-70">Monitor live e ultimi allarmi per filiale</div>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="text-sm opacity-70">Filiale</label>
+            <select id="filialeSelect" class="bg-slate-900/60 dark:bg-slate-900 border border-white/10 rounded-lg px-3 py-2"></select>
+          </div>
+        </section>
+
+        <!-- Barra stato globale -->
+        <section id="statusBar" class="glass scanbar rounded-xl p-3 hidden">
+          <div class="flex flex-wrap items-center gap-2 text-sm" id="statusBadges"></div>
+        </section>
+
+        <!-- ROUTES -->
+        <section id="route-home" class="space-y-6">
+          <div class="grid md:grid-cols-[minmax(360px,760px),1fr] gap-6">
+            <!-- LIVE -->
+            <div class="space-y-2">
+              <div class="flex items-center gap-3">
+                <div class="flex-1">
+                  <label class="block text-xs opacity-70 mb-1">Dimensione schermo LIVE</label>
+                  <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
+                </div>
+                <button id="btnReconnect" class="mt-6 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Riconnetti</button>
+                <button id="btnOpenProvider" class="mt-6 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600">Apri sito live</button>
+              </div>
+
+              <div class="stream-box">
+                <div class="absolute inset-x-0 top-0 h-10 flex items-center gap-2 px-2 bg-black/50 z-10">
+                  <div class="text-[11px] sm:text-xs truncate">
+                    <span class="opacity-70">Provider:</span> <span id="liveProvider" class="font-medium">—</span>
+                    <span class="mx-2">·</span>
+                    <span class="opacity-70">ID:</span> <span id="liveSid" class="font-mono"></span>
+                    <span class="mx-2">·</span>
+                    <span class="opacity-70">Password:</span> <span id="livePwd" class="font-mono"></span>
+                  </div>
+                  <div class="ml-auto flex items-center gap-2">
+                    <button id="btnCopySid" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Copia ID</button>
+                    <button id="btnCopyPwd" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Copia Password</button>
+                  </div>
+                </div>
+
+                <div id="statusBox" class="absolute left-0 right-0 top-10 text-center text-xs text-slate-200"></div>
+
+                <div id="jitsiContainer" class="absolute inset-0 hidden"></div>
+                <iframe id="liveFrame" class="hidden stream-frame" allow="autoplay; fullscreen; camera; microphone; display-capture"></iframe>
+                <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
+
+                <!-- Placeholder -->
+                <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">
+                  <div class="text-center space-y-2">
+                    <div class="text-3xl">📡</div>
+                    <div>Nessuna live avviata</div>
+                  </div>
+                </div>
+              </div>
+              <div id="errorBox" class="text-xs text-rose-300 min-h-5"></div>
             </div>
-            <div class="flex items-center gap-3">
-              <label class="text-sm text-slate-400">Filiale</label>
-              <select id="filialeSelect" class="bg-slate-900 border border-white/10 rounded-lg px-3 py-2"></select>
+
+            <!-- Colonna destra -->
+            <div class="flex flex-col gap-6">
+              <div id="checkFilialiPanel" class="glass rounded-2xl p-5 space-y-3">
+                <div class="font-medium tracking-wide mb-2">Check filiali</div>
+                <div id="checkFilialiRows" class="space-y-2"></div>
+              </div>
+
+              <div class="glass rounded-2xl p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="font-medium tracking-wide">Filiali & stato</div>
+                  <button id="btnReportGlobal" class="px-2 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-500">Report IA globale</button>
+                </div>
+                <div id="filialiDescWrap" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="route-storico" class="hidden space-y-4">
+          <div id="filterRangeWrap" class="flex flex-wrap items-center gap-2">
+            <span class="text-sm opacity-70">Intervallo:</span>
+            <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="24h">24h</button>
+            <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="7d">7 giorni</button>
+            <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="30d">30 giorni</button>
+            <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="all">Tutto</button>
+            <div class="ml-auto flex items-center gap-2">
+              <button id="btnExportCsv" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 text-sm">Esporta CSV</button>
+              <button id="btnPrint" class="px-3 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-sm">Stampa / PDF</button>
+            </div>
+          </div>
+          <div id="storicoWrap" class="space-y-6"></div>
+
+          <!-- Footer stampa -->
+          <div class="print-footer hidden">
+            <div class="print-logos">
+              <img id="printLogoSite" alt="Logo sito"/>
+            </div>
+            <div id="printFooterText">Storico Resinelli — generato il <span id="printDate"></span></div>
+            <div class="print-logos">
+              <img id="printLogoDev" alt="Logo sviluppatore"/>
+            </div>
+          </div>
+        </section>
+
+        <section id="route-impostazioni" class="hidden space-y-6">
+          <div class="glass rounded-2xl p-5">
+            <div class="font-medium mb-3">Profilo</div>
+            <div class="grid sm:grid-cols-2 gap-4">
+              <label class="block text-sm">Nome utente
+                <input id="usernameInput" class="mt-1 w-full bg-slate-950/60 dark:bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="Es. Mario" />
+              </label>
             </div>
           </div>
 
-          <!-- Barra stato globale -->
-          <div id="statusBar" class="glass scanbar rounded-xl p-3 hidden">
-            <div class="flex flex-wrap items-center gap-2 text-sm" id="statusBadges"></div>
+          <div class="glass rounded-2xl p-5">
+            <div class="font-medium mb-3">Branding / Loghi</div>
+            <div class="grid sm:grid-cols-3 gap-4">
+              <label class="block text-sm">Logo header URL
+                <input id="logoUrlInput" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="https://..." />
+              </label>
+              <label class="block text-sm">Favicon URL
+                <input id="iconUrlInput" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="https://..." />
+              </label>
+              <label class="block text-sm">Logo sviluppatore URL
+                <input id="devLogoUrlInput" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="https://..." />
+              </label>
+            </div>
+            <div class="mt-3">
+              <button id="btnSaveBranding" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva branding</button>
+            </div>
           </div>
 
-          <!-- ROUTES -->
-          <section id="route-home" class="space-y-6">
-            <div class="grid md:grid-cols-[minmax(360px,760px),1fr] gap-6">
-              <!-- LIVE -->
-              <div class="stream-outer">
-                <div class="mb-2 flex items-center gap-3">
-                  <div class="flex-1">
-                    <label class="block text-xs text-slate-400 mb-1">Dimensione schermo LIVE</label>
-                    <input id="liveSize" type="range" min="60" max="92" value="75" class="w-full">
-                  </div>
-                  <button id="btnReconnect" class="mt-6 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">Riconnetti</button>
-                  <button id="btnOpenProvider" class="mt-6 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600">Apri sito live</button>
-                </div>
-
-                <div class="stream-box" id="liveStreamBox">
-                  <div class="live-toolbar">
-                    <div class="text-xs sm:text-sm truncate">
-                      <span class="opacity-60">Provider:</span> <span id="liveProvider" class="font-medium">—</span>
-                      <span class="mx-2">·</span>
-                      <span class="opacity-80">ID:</span> <span id="liveSid" class="font-mono"></span>
-                      <span class="mx-2">·</span>
-                      <span class="opacity-80">Password:</span> <span id="livePwd" class="font-mono"></span>
-                    </div>
-                    <div class="ml-auto flex items-center gap-2">
-                      <button id="btnCopySid" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Copia ID</button>
-                      <button id="btnCopyPwd" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">Copia Password</button>
-                    </div>
-                  </div>
-
-                  <div id="statusBox" class="p-2 text-xs text-slate-300"></div>
-
-                  <!-- Container Jitsi -->
-                  <div id="jitsiContainer" class="absolute inset-0 hidden"></div>
-                  <!-- Iframe per VDO.Ninja (o altri embeddable) -->
-                  <iframe id="liveFrame" class="hidden stream-frame" allow="autoplay; fullscreen; camera; microphone; display-capture"></iframe>
-                  <!-- Video WebRTC WHEP (se mai lo userai) -->
-                  <video id="webrtcVideo" class="hidden stream-media" autoplay muted playsinline controls></video>
-                  <!-- Placeholder se nulla visibile -->
-                  <div id="noStream" class="w-full h-full grid place-items-center text-slate-400 text-sm p-6">Nessuna live avviata</div>
-                </div>
-                <div id="errorBox" class="text-xs text-rose-300 min-h-5"></div>
-              </div>
-
-              <!-- Colonna destra -->
-              <div class="flex flex-col gap-6">
-                <div id="checkFilialiPanel" class="glass rounded-2xl p-5 space-y-3">
-                  <div class="font-medium tracking-wide mb-2">Check filiali</div>
-                  <div id="checkFilialiRows" class="space-y-2"></div>
-                </div>
-                <div class="glass rounded-2xl p-5 space-y-3">
-                  <div class="font-medium tracking-wide mb-2">Filiali & stato</div>
-                  <div id="filialiDescWrap" class="space-y-2"></div>
-                </div>
-              </div>
+          <!-- Filiali -->
+          <div class="glass rounded-2xl p-5">
+            <div class="flex items-center justify-between">
+              <div class="font-medium">Filiali</div>
+              <button id="btnAddFiliale" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Aggiungi filiale</button>
             </div>
-          </section>
+            <div id="filialiList" class="mt-4 space-y-3"></div>
+            <div class="mt-2 text-xs opacity-70">
+              <b>Jitsi Meet</b> = embed diretto in pagina (stanza + password).<br>
+              <b>VDO.Ninja</b> = embed diretto in pagina (view ID + password).<br>
+              <b>WHEP/Worker</b> = placeholder (riattiva solo con endpoint compatibile).
+            </div>
+          </div>
 
-          <!-- STORICO + filtri + export -->
-          <section id="route-storico" class="hidden space-y-4">
-            <div id="filterRangeWrap" class="flex flex-wrap items-center gap-2">
-              <span class="text-sm text-slate-400">Intervallo:</span>
-              <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="24h">24h</button>
-              <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="7d">7 giorni</button>
-              <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="30d">30 giorni</button>
-              <button class="range-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm" data-range="all">Tutto</button>
-              <div class="ml-auto flex items-center gap-2">
-                <button id="btnExportCsv" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 text-sm">Esporta CSV</button>
-                <button id="btnPrint" class="px-3 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-sm">Stampa / PDF</button>
-              </div>
-            </div>
-            <div id="storicoWrap" class="space-y-6"></div>
-            <!-- Footer stampa -->
-            <div class="print-footer hidden">
-              <div class="print-logos">
-                <img id="printLogoSite" alt="Logo sito"/>
-              </div>
-              <div id="printFooterText">Storico Resinelli — generato il <span id="printDate"></span></div>
-              <div class="print-logos">
-                <img id="printLogoDev" alt="Logo sviluppatore"/>
-              </div>
-            </div>
-          </section>
-
-          <section id="route-impostazioni" class="hidden space-y-6">
-            <div class="glass rounded-2xl p-5">
-              <div class="font-medium mb-3">Profilo</div>
-              <div class="grid sm:grid-cols-2 gap-4">
-                <label class="block text-sm text-slate-300">Nome utente
-                  <input id="usernameInput" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="Es. Mario" />
-                </label>
-              </div>
-            </div>
-
-            <!-- Impostazioni Filiali -->
-            <div class="glass rounded-2xl p-5">
-              <div class="flex items-center justify-between">
-                <div class="font-medium">Filiali</div>
-                <button id="btnAddFiliale" class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Aggiungi filiale</button>
-              </div>
-              <div id="filialiList" class="mt-4 space-y-3"></div>
-              <div class="mt-2 text-xs text-slate-400">
-                <b>Jitsi Meet</b> = embed diretto in pagina (stanza + password).<br>
-                <b>VDO.Ninja</b> = embed diretto in pagina (view ID + password).<br>
-                <b>WHEP/Worker</b> = solo se riattivi un endpoint compatibile.
-              </div>
-            </div>
-            <div class="text-xs text-slate-500">Le impostazioni sono salvate nel tuo browser (LocalStorage).</div>
-          </section>
-        </main>
-      </div>
+          <div class="text-xs opacity-60">Le impostazioni sono salvate nel tuo browser (LocalStorage).</div>
+        </section>
+      </main>
     </div>
   </div>
 
-  <!-- MODAL: Impostazioni avanzate -->
-  <div id="advModal" class="overlay" style="z-index:100;">
-    <div class="glass rounded-2xl p-6 w-[min(760px,92vw)]">
+  <!-- ========== MODALS ========== -->
+
+  <!-- Advanced -->
+  <div id="advModal" class="overlay">
+    <div class="glass rounded-2xl p-6 w-[min(760px,92vw)] animate-slide">
       <div class="flex items-center justify-between mb-4">
         <div class="text-lg font-medium">Impostazioni avanzate</div>
         <button id="advClose" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Chiudi</button>
       </div>
       <div id="advGate" class="space-y-3">
-        <div class="text-sm text-slate-300">Inserisci password per sbloccare le impostazioni:</div>
-        <input id="advPwd" type="password" class="w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="Password" />
+        <div class="text-sm">Inserisci password per sbloccare le impostazioni:</div>
+        <input id="advPwd" type="password" class="w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="Password" />
         <button id="advUnlock" class="px-3 py-2 rounded-lg bg-amber-500/90 hover:bg-amber-500">Sblocca</button>
       </div>
       <div id="advBody" class="hidden space-y-4">
         <div class="grid sm:grid-cols-2 gap-4">
-          <label class="block text-sm text-slate-300">Google Client ID
-            <input id="advClientId" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="xxxx.apps.googleusercontent.com" />
+          <label class="block text-sm">Google Client ID
+            <input id="advClientId" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="xxxx.apps.googleusercontent.com" />
           </label>
-          <label class="block text-sm text-slate-300">Google API Key (opzionale)
-            <input id="advApiKey" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="AIza..." />
-          </label>
-        </div>
-        <div class="grid sm:grid-cols-2 gap-4">
-          <label class="block text-sm text-slate-300">Query Gmail allarmi (default)
-            <input id="advGmailQuery" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" />
-          </label>
-          <label class="block text-sm text-slate-300">Regex temperatura
-            <input id="advTempRx" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" />
+          <label class="block text-sm">Google API Key (opzionale)
+            <input id="advApiKey" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="AIza..." />
           </label>
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
-          <label class="block text-sm text-slate-300">Login hint (consiglia account)
-            <input id="advLoginHint" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="es. resinellialimentari@gmail.com" />
+          <label class="block text-sm">Query Gmail allarmi (default)
+            <input id="advGmailQuery" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" />
           </label>
-          <label class="block text-sm text-slate-300">Scopes (opzionale)
-            <input id="advScopes" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" placeholder="https://www.googleapis.com/auth/gmail.readonly" />
+          <label class="block text-sm">Regex temperatura
+            <input id="advTempRx" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" />
           </label>
         </div>
-        <div class="text-xs text-slate-400">Origin da inserire nel Client OAuth (GitHub Pages): <code id="originsHint"></code></div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block text-sm">Login hint (consiglia account)
+            <input id="advLoginHint" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="es. resinellialimentari@gmail.com" />
+          </label>
+          <label class="block text-sm">Scopes (opzionale)
+            <input id="advScopes" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" placeholder="https://www.googleapis.com/auth/gmail.readonly" />
+          </label>
+        </div>
+        <div class="text-xs opacity-70">Origin consigliata (GitHub Pages): <code id="originsHint"></code></div>
         <div class="flex flex-wrap gap-2 justify-end">
           <button id="advTest"  class="px-3 py-2 rounded-lg bg-blue-500/90 hover:bg-blue-500">Test accesso</button>
           <button id="advSave"  class="px-3 py-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
@@ -374,24 +371,48 @@
     </div>
   </div>
 
-  <!-- MODAL: Report IA -->
+  <!-- Report IA -->
   <div id="aiReportModal" class="overlay">
-    <div class="glass rounded-2xl p-6 w-[min(760px,92vw)]">
-      <div class="flex items-center justify-between mb-4">
-        <div class="text-lg font-medium">Report IA — ultime 24 ore</div>
-        <button id="aiReportClose" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Chiudi</button>
+    <div class="glass rounded-2xl p-0 w-[min(860px,96vw)] animate-slide">
+      <div class="p-4 border-b border-white/10 flex items-center justify-between">
+        <div class="text-lg font-medium" id="aiReportTitle">Report IA</div>
+        <div class="flex items-center gap-2">
+          <button id="btnReportDownloadTxt" class="px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600">Scarica TXT</button>
+          <button id="aiReportClose" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Chiudi</button>
+        </div>
       </div>
-      <pre id="aiReportBody" class="whitespace-pre-wrap text-sm text-slate-200 leading-6"></pre>
+      <div class="grid md:grid-cols-2 gap-0">
+        <div class="p-4 space-y-3">
+          <div id="aiReportKpi" class="grid grid-cols-2 gap-2 print-kpis"></div>
+          <div class="space-y-2">
+            <div class="text-sm opacity-70">Trend ultime 24h</div>
+            <div id="aiReportChart" class="w-full h-40 bg-black/40 rounded-lg overflow-hidden grid place-items-center">
+              <div class="text-xs opacity-60">Nessun dato</div>
+            </div>
+          </div>
+          <div>
+            <div class="text-sm opacity-70 mb-1">Heatmap celle</div>
+            <div id="aiReportHeatmap" class="flex flex-wrap gap-1"></div>
+          </div>
+        </div>
+        <div class="p-4 border-t md:border-t-0 md:border-l border-white/10">
+          <div class="text-sm opacity-70 mb-2">Ultimi eventi</div>
+          <div id="aiReportList" class="space-y-2 max-h-[50vh] overflow-auto pr-2"></div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Modal row details -->
+  <!-- Dettaglio riga -->
   <div id="rowModal" class="overlay">
-    <div id="rowModalBody"></div>
+    <div id="rowModalBody" class="glass rounded-2xl p-6 w-[min(720px,92vw)] animate-slide"></div>
   </div>
 
+  <!-- ========== APP SCRIPT ========== -->
 <script>
-/**************** CONFIG ****************/
+/* ===================== CONFIG / STATE ===================== */
+const APP_VERSION = 3; // per migrazioni future
+
 const DEFAULTS = {
   CLIENT_ID: "882609618607-c0e975cg1ughd4bi76hnee58c2ka6h2m.apps.googleusercontent.com",
   API_KEY: "",
@@ -399,711 +420,88 @@ const DEFAULTS = {
   GMAIL_QUERY: "newer_than:30d (subject:(temperatura) OR subject:(allarme) OR subject:(temperature))",
   TEMP_RX: "(-?\\d+(?:[\\.,]\\d+)?)\\s*(?:°\\s*[Cc]|gradi)",
   LOGIN_HINT: "resinellialimentari@gmail.com",
-
-  /* Branding */
-  LOGO_URL: "",      // logo sito nell'header e in stampa
-  ICON_URL: "",      // favicon
-  DEV_LOGO_URL: "",   // logo sviluppatore in stampa (opzionale)
-  
-  /* Gmail Polling */
-  GMAIL_POLL_MS: 60000
+  LOGO_URL: "",
+  ICON_URL: "",
+  DEV_LOGO_URL: "",
+  GMAIL_POLL_MS: 60000,
+  THEME: "auto" // auto|light|dark
 };
 
 const DEFAULT_FILIALI = [
-  {
-    id: 'castione',
-    name: 'Resinelli Castione',
-    email: 'allarmi@edilrepairs.ch',
-    streamProvider: 'jitsi',
-    jitsiDomain: 'meet.jit.si',
-    jitsiRoom: 'Resinelli-castione',
-    jitsiPass: '',
-    streamUrl: '',
-    streamUser: '',
-    streamPass: '',
-    streamAudio: false,
-    vdoViewId: '',
-    vdoPassword: ''
-  },
-  { id:'santantonino', name:"Resinelli Sant'Antonino", email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:"Resinelli-santantonino", jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' },
+  { id:'castione', name:'Resinelli Castione', email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:'Resinelli-castione', jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' },
+  { id:'santantonino', name:"Resinelli Sant'Antonino", email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:'Resinelli-santantonino', jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' },
   { id:'losone', name:'Resinelli Losone', email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:'Resinelli-losone', jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' }
 ];
 
-let state = { username: '', filiali: [], history: {} };
-let cfg = {};
-let tokenClient;
-let gmailReady = false;
-
-/* ===================== AUTH GMAIL ===================== */
-async function waitForGoogleGIS(maxMs=10000){
-  const t0 = Date.now();
-  while (!window.google?.accounts?.oauth2) {
-    if (Date.now()-t0 > maxMs) throw new Error("google GIS non caricato");
-    await new Promise(r=>setTimeout(r,50));
-  }
-}
-
-async function initGIS(){
-  await waitForGoogleGIS();
-  if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-    alert('Devi impostare il Google OAuth CLIENT_ID.');
-    window.openAdvancedModal?.();
-    throw new Error('CLIENT_ID mancante');
-  }
-  if (tokenClient) return;
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: cfg.CLIENT_ID,
-    scope: (cfg?.SCOPES || DEFAULTS.SCOPES),
-    hint: cfg.LOGIN_HINT || undefined,
-    callback: (resp)=>{
-      if (resp?.access_token){
-        gapi.client.setToken({ access_token: resp.access_token });
-        updateGmailStatusUI();
-      }
-    }
-  });
-}
-
-async function signIn(prompt=''){
-  return new Promise((resolve, reject)=>{
-    try{
-      tokenClient.callback=(r)=> r?.access_token ? resolve(r) : reject(r);
-      tokenClient.requestAccessToken({ prompt, hint: cfg.LOGIN_HINT || '' });
-    }catch(e){ reject(e); }
-  });
-}
-
-async function signOut(){
-  try{
-    const tk = gapi?.client?.getToken?.();
-    if (tk?.access_token){
-      google.accounts.oauth2.revoke(tk.access_token, ()=>{});
-      gapi.client.setToken(null);
-    }
-    updateGmailStatusUI();
-    stopGmailPolling();
-  }catch(e){ console.warn("Errore durante signOut", e); }
-}
-
-/**************** GMAIL SERVICE ****************/
+let state = { username: '', filiali: [], history: {}, version: APP_VERSION };
+let cfg = { ...DEFAULTS };
+let tokenClient = null;
 let gmailPollHandle = null;
 
-// Servizio Gmail con polling
-const gmailService = {
-  async isConnected() {
-    try {
-      const token = gapi?.client?.getToken?.();
-      return !!(token && token.access_token);
-    } catch (e) {
-      return false;
-    }
-  },
-
-  async fetchEmails() {
-    try {
-      if (!await this.isConnected()) return;
-      await fetchAlarms();
-    } catch (e) {
-      console.error('Errore nel fetch emails:', e);
-      throw e;
-    }
-  }
-};
-
-// Funzioni di polling Gmail
-async function updateGmailStatusUI() {
-  try {
-    const connected = await gmailService.isConnected();
-    const el = document.querySelector(".gmail-status");
-    const text = document.getElementById("gmail-status-text");
-    if (!el || !text) return;
-
-    el.classList.toggle("connected", connected);
-    el.classList.toggle("error", false);
-    text.textContent = connected ? "Gmail connesso" : "Gmail non connesso";
-  } catch (e) {
-    console.error('Errore aggiornamento UI stato Gmail:', e);
-  }
-}
-
-async function gmailTick() {
-  try {
-    const connected = await gmailService.isConnected();
-    if (connected) {
-      await gmailService.fetchEmails();
-    }
-    await updateGmailStatusUI();
-  } catch (e) {
-    const el = document.querySelector(".gmail-status");
-    if (el) {
-      el.classList.add("error");
-      const text = document.getElementById("gmail-status-text");
-      if (text) text.textContent = "Gmail: errore";
-    }
-    console.error('Errore nel polling Gmail:', e);
-  }
-}
-
-function startGmailPolling() {
-  stopGmailPolling();
-  gmailTick(); // primo giro immediato
-  gmailPollHandle = setInterval(gmailTick, cfg.GMAIL_POLL_MS || DEFAULTS.GMAIL_POLL_MS);
-}
-
-function stopGmailPolling() {
-  if (gmailPollHandle) {
-    clearInterval(gmailPollHandle);
-    gmailPollHandle = null;
-  }
-}
-
-/**************** STORAGE ****************/
-function loadState(){
-  const s = JSON.parse(localStorage.getItem('resinelli_monitor')||'{}');
-  state.username = s.username || '';
-  const incoming = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
-  state.filiali = incoming.map((f,i)=>{
-    let provider = f.streamProvider;
-    if (!provider) provider = f.streamUrl ? 'whep' : 'jitsi';
-    return {
-      id: f.id || ('f'+i),
-      name: f.name || ('Filiale '+(i+1)),
-      email: f.email || 'allarmi@edilrepairs.ch',
-      streamProvider: provider,
-      jitsiDomain: f.jitsiDomain || 'meet.jit.si',
-      jitsiRoom: f.jitsiRoom || '',
-      jitsiPass: typeof f.jitsiPass === 'string' ? f.jitsiPass : '',
-      streamUrl: f.streamUrl || '',
-      streamUser: typeof f.streamUser === 'string' ? f.streamUser : '',
-      streamPass: typeof f.streamPass === 'string' ? f.streamPass : '',
-      streamAudio: !!f.streamAudio,
-      vdoViewId: typeof f.vdoViewId === 'string' ? f.vdoViewId : '',
-      vdoPassword: typeof f.vdoPassword === 'string' ? f.vdoPassword : ''
-    };
-  });
-  state.history  = s.history || {};
-  cfg = Object.assign({}, DEFAULTS, s.cfg||{});
-
-  // Applica subito favicon e loghi se presenti
-  applyBranding();
-}
-
-function saveState(){
-  localStorage.setItem('resinelli_monitor', JSON.stringify({ ...state, cfg }));
-}
-
-/**************** HELPERS ****************/
+/* ===================== UTIL ===================== */
 const $ = (sel)=> document.querySelector(sel);
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild }
-function fmtDate(d){ try { return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) } catch(_) { return new Date(d).toLocaleString() } }
+function fmtDate(d){ try{ return new Intl.DateTimeFormat('it-CH',{dateStyle:'medium', timeStyle:'short'}).format(d) }catch{ return new Date(d).toLocaleString() } }
 function toNumber(str){ return parseFloat(String(str).replace(',', '.')) }
 function normalizeText(s){ return (s||'').replace(/[–—−]/g,'-').replace(/\s+/g,' ').trim(); }
 function statusCellKey(subject){ const m=(subject||'').match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i); return m? normalizeText(m[1]).toLowerCase() : normalizeText(subject||'').toLowerCase(); }
-function copyTxt(t){ try{ return navigator.clipboard.writeText(t||''); }catch{} }
+function copyTxt(t){ try{ navigator.clipboard.writeText(t||''); }catch{} }
 function downloadFile(filename, content, mime='text/plain'){
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
-
-/*********** LIVE height ***********/
-function uiBindLiveSizer() {
-  const input = $('#liveSize');
-  const box = $('#liveStreamBox');
-  if (!input || !box) return;
-  let val = localStorage.getItem('live_h') || input.value || '75';
-  input.value = val;
-  box.style.setProperty('--live-h', val + 'svh');
-  input.addEventListener('input', () => {
-    val = input.value;
-    localStorage.setItem('live_h', val);
-    box.style.setProperty('--live-h', val + 'svh');
-  });
-}
-
-/**************** LIVE: Provider-aware (Jitsi / VDO / WHEP) ****************/
-let webrtcSession = null;
-let jitsiApi = null;
-
 function setStatus(msg){ const el=$('#statusBox'); if(el) el.textContent = msg || ""; }
-function showError(msg){ $('#errorBox').textContent = msg || ""; }
+function showError(msg){ const el=$('#errorBox'); if(el) el.textContent = msg || ""; }
 
-function cleanupWebRTC(){
+/* ===================== THEME ===================== */
+function applyTheme(v){
+  const root = document.documentElement;
+  const theme = v || cfg.THEME || 'auto';
+  root.setAttribute('data-theme', theme);
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  if (theme === 'auto') document.body.setAttribute('data-theme', prefersDark? 'dark':'light');
+  else document.body.setAttribute('data-theme', theme);
+  $('#themeIcon').textContent = (document.body.getAttribute('data-theme')==='dark') ? '🌙' : '🌞';
+}
+
+/* ===================== STORAGE ===================== */
+function migrateIfNeeded(s){
+  // spazio per migrazioni future, ad es. cambi formato
+  return s;
+}
+function loadState(){
   try{
-    if(webrtcSession?.pc){
-      webrtcSession.pc.getTransceivers?.().forEach(t=>t.stop?.());
-      webrtcSession.pc.getSenders?.().forEach(s=>s.track?.stop?.());
-      webrtcSession.pc.getReceivers?.().forEach(r=>r.track?.stop?.());
-      webrtcSession.pc.close?.();
+    const raw = localStorage.getItem('resinelli_monitor');
+    if (raw){
+      const s = migrateIfNeeded(JSON.parse(raw));
+      state.username = s.username || '';
+      state.filiali = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+      state.history = s.history || {};
+      state.version = s.version || APP_VERSION;
+      cfg = { ...DEFAULTS, ...(s.cfg||{}) };
+    } else {
+      state.filiali = JSON.parse(JSON.stringify(DEFAULT_FILIALI));
     }
-  }catch{}
-  webrtcSession = null;
+  }catch(e){ console.warn('Storage load error', e); }
+  applyBranding();
+  applyTheme(cfg.THEME);
 }
-async function stopWhepResource(){ if(webrtcSession?.resourceUrl){ try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{} } }
-
-function destroyJitsi(){ try{ jitsiApi?.dispose?.(); }catch{} jitsiApi = null; }
-
-function startJitsi(f) {
-  destroyJitsi();
-  const box = document.getElementById('jitsiContainer');
-  const frame = document.getElementById('liveFrame');
-  const vid = document.getElementById('webrtcVideo');
-  const none = document.getElementById('noStream');
-
-  if (!f.jitsiDomain || !f.jitsiRoom) {
-    none.classList.remove('hidden'); box.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden');
-    showError('Config Jitsi incompleta (domain/room).'); return;
-  }
-  none.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden'); box.classList.remove('hidden');
-
-  const domain = f.jitsiDomain || 'meet.jit.si';
-  const options = {
-    roomName: f.jitsiRoom,
-    parentNode: box,
-    width: '100%',
-    height: '100%',
-    configOverwrite: {
-      prejoinPageEnabled: false,
-      disableDeepLinking: true,
-      startWithAudioMuted: true,
-      startWithVideoMuted: true
-    },
-    interfaceConfigOverwrite: {
-      TOOLBAR_BUTTONS: ['microphone','camera','desktop','fullscreen','hangup']
-    },
-    userInfo: { displayName: state.username || 'Viewer' }
-  };
-  try{
-    jitsiApi = new JitsiMeetExternalAPI(domain, options);
-    if (f.jitsiPass) {
-      jitsiApi.addListener('videoConferenceJoined', () => jitsiApi.executeCommand('password', f.jitsiPass));
-      jitsiApi.addListener('passwordRequired',      () => jitsiApi.executeCommand('password', f.jitsiPass));
-    }
-  }catch(e){
-    showError('Errore init Jitsi: ' + (e?.message || e));
-    box.classList.add('hidden'); none.classList.remove('hidden');
-  }
+function saveState(){
+  try { localStorage.setItem('resinelli_monitor', JSON.stringify({ ...state, cfg })); } catch(e){ console.warn('Storage save error', e); }
 }
 
-function buildVdoViewUrl(id, pwd, label, rawUrl){
-  if (rawUrl && /vdo\.ninja/.test(rawUrl)) {
-    const u = new URL(rawUrl);
-    u.searchParams.set('cleanoutput','1');
-    u.searchParams.set('autostart','1');
-    u.searchParams.set('embed','1');
-    if (label) u.searchParams.set('label', label);
-    return u.toString();
-  }
-  const p = new URLSearchParams();
-  if (id)  p.set('view', id);
-  if (pwd) { p.set('password', pwd); p.set('p', pwd); }
-  p.set('cleanoutput','1');
-  p.set('autostart','1');
-  p.set('embed','1');
-  if (label) p.set('label', label);
-  return `https://vdo.ninja/?${p.toString()}`;
-}
+/* ===================== GMAIL ===================== */
+const gmailService = {
+  isConnected(){
+    try{ const token = gapi?.client?.getToken?.(); return !!(token && token.access_token); } catch{ return false; }
+  },
+  async fetchEmails(){ try{ if (!this.isConnected()) return; await fetchAlarms(); }catch(e){ console.error('fetchEmails', e); throw e; } }
+};
 
-function startVdo(f){
-  destroyJitsi();
-  const box = document.getElementById('jitsiContainer');
-  const frame = document.getElementById('liveFrame');
-  const vid = document.getElementById('webrtcVideo');
-  const none = document.getElementById('noStream');
-
-  if (!f.vdoViewId && !/vdo\.ninja/.test(f.streamUrl||'')) {
-    showError('VDO.Ninja: View ID mancante.');
-    frame.classList.add('hidden'); box.classList.add('hidden'); vid.classList.add('hidden'); none.classList.remove('hidden');
-    return;
-  }
-  const url = buildVdoViewUrl(f.vdoViewId || '', f.vdoPassword || '', f.name || 'Live', f.streamUrl);
-  frame.src = url;
-  frame.classList.remove('hidden'); box.classList.add('hidden'); vid.classList.add('hidden'); none.classList.add('hidden');
-}
-
-async function startWhep(){ // stub
-  const none = document.getElementById('noStream');
-  none.classList.remove('hidden');
-  setStatus('WHEP non configurato');
-  showError('WHEP disabilitato (usa Jitsi o VDO.Ninja).');
-}
-
-function updateLiveToolbar(){
-  const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
-  if(!f){ $('#liveProvider').textContent='—'; $('#liveSid').textContent='—'; $('#livePwd').textContent='—'; return; }
-  if (f.streamProvider === 'jitsi'){
-    $('#liveProvider').textContent = 'Jitsi';
-    $('#liveSid').textContent = f.jitsiRoom || '—';
-    $('#livePwd').textContent = f.jitsiPass || '—';
-  } else if (f.streamProvider === 'vdo'){
-    $('#liveProvider').textContent = 'VDO.Ninja';
-    $('#liveSid').textContent = f.vdoViewId || '—';
-    $('#livePwd').textContent = f.vdoPassword || '—';
-  } else {
-    $('#liveProvider').textContent = 'WHEP/Worker';
-    $('#liveSid').textContent = f.streamUser || '—';
-    $('#livePwd').textContent = f.streamPass || '—';
-  }
-}
-
-function openOnProvider(f) {
-  if (f.streamProvider === 'jitsi') {
-    const url = `https://${f.jitsiDomain||'meet.jit.si'}/${encodeURIComponent(f.jitsiRoom||'')}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  } else if (f.streamProvider === 'vdo') {
-    const url = buildVdoViewUrl(f.vdoViewId||'', f.vdoPassword||'', f.name||'Live', f.streamUrl);
-    window.open(url, '_blank', 'noopener,noreferrer');
-  } else {
-    const url = f.streamUrl; if (url) window.open(url, '_blank', 'noopener,noreferrer');
-  }
-}
-
-async function startLiveForCurrent(){
-  const frame = $('#liveFrame'); const video = $('#webrtcVideo'); const none = $('#noStream');
-  const jitsiBox = $('#jitsiContainer');
-  frame.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden'); jitsiBox.classList.add('hidden');
-  setStatus(''); showError('');
-  await stopWhepResource(); cleanupWebRTC(); destroyJitsi();
-
-  const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
-  if(!f){ showError('Nessuna filiale selezionata.'); return; }
-  updateLiveToolbar();
-
-  if (f.streamProvider === 'vdo'){ startVdo(f); setStatus('VDO.Ninja'); return; }
-  if (f.streamProvider === 'jitsi'){ startJitsi(f); setStatus('Jitsi Meet'); return; }
-  startWhep();
-}
-
-/**************** CHECK/UX ****************/
-function computeFilialeHasActiveAlarm(fid){
-  const rows = (state.history[fid]||[]).slice().sort((a,b)=>a.date-b.date);
-  const lastByCell = new Map();
-  for(const r of rows){ const key = r.cellKey || statusCellKey(r.subject); lastByCell.set(key, r.status); }
-  for(const st of lastByCell.values()){ if(st==='alto') return true; }
-  return false;
-}
-function runCheckFiliali(){
-  const wrap = $('#checkFilialiRows'); wrap.innerHTML = '';
-  (state.filiali||[]).forEach(filiale=>{
-    const row = el(`<div class="flex items-center justify-between text-sm">
-      <div class="w-56 truncate text-slate-300">${filiale.name}</div>
-      <div class="flex items-center gap-3"><div class="text-xs text-slate-400" id="stat-${filiale.id}">—</div></div>
-    </div>`);
-    const rows = state.history[filiale.id] || [];
-    const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
-    const hasActive = computeFilialeHasActiveAlarm(filiale.id);
-    const txt = hasActive ? 'ALLARME' : 'OK';
-    const when = last ? ' · ' + fmtDate(new Date(last.date)) : '';
-    row.querySelector(`#stat-${filiale.id}`).innerHTML =
-      `<span class="px-2 py-0.5 rounded-md ${hasActive?'bg-red-500/15 text-red-300 border border-red-500/30':'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${txt}</span>${when}`;
-    wrap.appendChild(row);
-  });
-}
-function uiRenderFilialiDesc(){
-  const wrap = $('#filialiDescWrap'); wrap.innerHTML = '';
-  state.filiali.forEach(filiale=>{
-    const rows = state.history[filiale.id] || [];
-    const hasActive = computeFilialeHasActiveAlarm(filiale.id);
-    const last = rows.length ? rows.slice().sort((a,b)=>b.date-a.date)[0] : null;
-    let cred = '';
-    if (filiale.streamProvider === 'jitsi')
-      cred = `Room: <code>${filiale.jitsiRoom||'—'}</code> · Pass: <code>${filiale.jitsiPass||'—'}</code>`;
-    else if (filiale.streamProvider === 'vdo')
-      cred = `View: <code>${filiale.vdoViewId||'—'}</code> · Pass: <code>${filiale.vdoPassword||'—'}</code>`;
-    else
-      cred = `Endpoint: <code>${(filiale.streamUrl||'').replace(/^https?:\/\//,'').replace(/\/.*/,'')||'—'}</code>`;
-    const card = el(`<div class="glass rounded-xl p-3">
-      <div class="flex items-center gap-3">
-        <div class="flex-1 min-w-0">
-          <div class="font-medium text-slate-200 truncate">${filiale.name}</div>
-          <div class="text-xs text-slate-400 mt-1">${cred}</div>
-        </div>
-        <div>${hasActive
-          ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
-          : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>'}</div>
-        <button class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
-        <button class="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-xs" data-open-provider="${filiale.id}">Apri su Provider</button>
-        <button class="px-2 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-xs" data-ai-report="${filiale.id}">Report IA</button>
-      </div>
-      ${last? `<div class="text-xs text-slate-500 mt-1">Ultimo evento: ${fmtDate(new Date(last.date))}</div>`:''}
-    </div>`);
-    card.querySelector('[data-open-live]').addEventListener('click', ()=>{
-      $('#filialeSelect').value = filiale.id;
-      startLiveForCurrent();
-      document.getElementById('liveStreamBox')?.scrollIntoView({behavior:'smooth', block:'center'});
-    });
-    card.querySelector('[data-open-provider]').addEventListener('click', ()=> openOnProvider(filiale));
-    card.querySelector('[data-ai-report]').addEventListener('click', ()=> openAIReport(filiale.id, filiale.name));
-    wrap.appendChild(card);
-  });
-}
-
-/**************** POPUP DETTAGLI ****************/
-function uiOpenRowDetails(row, filialeName){
-  const modal = $('#rowModal'); const body = $('#rowModalBody');
-  let cella = ''; let filiale = filialeName || ''; let subject = row.subject || '';
-  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—'; let minmax = '—';
-  const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
-  if (m) { cella = m[1].trim(); filiale = m[2].trim(); } else { cella = subject; }
-  if (isFinite(row.min) && isFinite(row.max)) { minmax = row.min + '–' + row.max + ' °C'; }
-  body.innerHTML = `
-    <div class="mb-2 text-lg font-semibold">${cella}</div>
-    <div class="mb-2 text-sm text-slate-400">Filiale: <span class="font-medium text-slate-200">${filiale}</span></div>
-    <div class="mb-2 text-sm text-slate-400">Temperatura: <span class="font-medium text-slate-200">${temp}</span></div>
-    <div class="mb-2 text-sm text-slate-400">Range min–max: <span class="font-medium text-slate-200">${minmax}</span></div>
-    <div class="mb-2 text-sm text-slate-400">Data/ora: <span class="font-medium text-slate-200">${fmtDate(new Date(row.date))}</span></div>
-    <div class="mb-2 text-sm text-slate-400">Subject: <span class="font-medium text-slate-200">${subject}</span></div>
-    <div class="mt-4 flex justify-end"><button id="rowModalClose" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Chiudi</button></div>
-  `;
-  modal.classList.add('show');
-  $('#rowModalClose').onclick = () => modal.classList.remove('show');
-  modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
-}
-
-/**************** ROUTER & STATUS ****************/
-const routes = ['home','storico','impostazioni'];
-function setActiveTab(hash){ document.querySelectorAll('.tab-btn').forEach(b=>{ const r=b.getAttribute('data-route'); b.classList.toggle('active', r===hash); }); }
-function checkFilialiStatus(){
-  const bar = $('#statusBar'); const badges = $('#statusBadges'); badges.innerHTML = '';
-  const items = state.filiali.map(f=>{
-    const rows = (state.history[f.id]||[]);
-    const last = rows.slice().sort((a,b)=>b.date-a.date)[0];
-    const isAlarm = computeFilialeHasActiveAlarm(f.id);
-    return { name:f.name, last, isAlarm };
-  });
-  if(!items.length){ bar.classList.add('hidden'); return }
-  items.forEach(it=>{
-    const color = it.isAlarm? 'bg-red-500/15 text-red-300 border border-red-500/30' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
-    badges.appendChild(el(`<span class="px-2 py-1 rounded-md ${color} text-xs">${it.name}${it.last? ' · '+fmtDate(new Date(it.last.date)) : ''}</span>`));
-  });
-  bar.classList.remove('hidden');
-}
-function go(route){
-  routes.forEach(r=> document.getElementById('route-'+r).classList.toggle('hidden', r!==route));
-  $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
-  setActiveTab('#'+route);
-  if(route==='storico') renderStorico();
-  if(route==='home'){ checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer(); }
-  if(route==='impostazioni') renderImpostazioni();
-  history.replaceState(null, '', '#'+route);
-}
-window.addEventListener('hashchange', ()=>{ const r = (location.hash||'#home').slice(1); if(routes.includes(r)) go(r); });
-
-/**************** STORICO: filtro + export ****************/
-let currentRange = 'all';
-function getCutoff(rangeKey){
-  const now = Date.now();
-  if (rangeKey==='24h') return now - 24*3600*1000;
-  if (rangeKey==='7d')  return now - 7*24*3600*1000;
-  if (rangeKey==='30d') return now - 30*24*3600*1000;
-  return 0; // all
-}
-function filterRowsByRange(rows, rangeKey){
-  const cutoff = getCutoff(rangeKey);
-  return cutoff ? rows.filter(r=> r.date >= cutoff) : rows.slice();
-}
-function renderStorico(){
-  const wrap = $('#storicoWrap'); wrap.innerHTML = '';
-  const rangeKey = currentRange;
-  for(const f of state.filiali){
-    const allRows = (state.history[f.id]||[]).slice().sort((a,b)=>b.date-a.date);
-    const rows = filterRowsByRange(allRows, rangeKey);
-    const openCount = (()=>{
-      const lastByCell=new Map();
-      for(const r of allRows.slice().reverse()){ const key=r.cellKey||statusCellKey(r.subject); lastByCell.set(key,r.status); }
-      let c=0; for(const st of lastByCell.values()){ if(st==='alto') c++; } return c;
-    })();
-    const section = el(`<div class="glass rounded-2xl p-5">
-      <div class="flex items-center justify-between mb-3">
-        <div class="font-medium">${f.name}</div>
-        <div class="text-xs text-slate-400">${rows.length} eventi nel periodo · ${openCount} allarmi aperti</div>
-      </div>
-      <div class="overflow-x-auto"><table class="min-w-full text-sm">
-        <thead class="text-slate-400"><tr>
-          <th class="text-left py-2 pr-4">Data</th>
-          <th class="text-left py-2 pr-4">Stato</th>
-          <th class="text-left py-2 pr-4">Temperatura</th>
-          <th class="text-left py-2 pr-4">Range</th>
-          <th class="text-left py-2 pr-4">Cella/Descrizione</th>
-          <th class="text-left py-2 pr-4">Oggetto</th>
-        </tr></thead>
-        <tbody></tbody></table></div></div>`);
-    const tbody = section.querySelector('tbody');
-    rows.forEach(r=>{
-      let cella=''; let subject=r.subject||''; let minmax='—';
-      const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
-      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
-      if (isFinite(r.min) && isFinite(r.max)) minmax = r.min + '–' + r.max + ' °C';
-      const badge = (r.status==='alto')
-        ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
-        : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>';
-      const tr = el(`<tr class="border-t border-white/10 cursor-pointer hover:bg-white/5">
-        <td class="py-2 pr-4 whitespace-nowrap">${fmtDate(new Date(r.date))}</td>
-        <td class="py-2 pr-4">${badge}</td>
-        <td class="py-2 pr-4">${isFinite(r.temp)? (r.temp.toFixed(1)+' °C') : '—'}</td>
-        <td class="py-2 pr-4">${minmax}</td>
-        <td class="py-2 pr-4">${cella}</td>
-        <td class="py-2 pr-4">${subject}</td>
-      </tr>`);
-      tr.addEventListener('click', ()=> uiOpenRowDetails(r, f.name));
-      tbody.appendChild(tr);
-    });
-    wrap.appendChild(section);
-  }
-}
-
-function exportCsv(){
-  const rangeKey = currentRange;
-  const cutoff = getCutoff(rangeKey);
-  const lines = [];
-  lines.push(['Filiale','Data','Stato','Temperatura','Min','Max','Cella/Descrizione','Oggetto'].join(';'));
-  for(const f of state.filiali){
-    const rows = (state.history[f.id]||[]);
-    rows.filter(r => !cutoff || r.date>=cutoff).sort((a,b)=>a.date-b.date).forEach(r=>{
-      const d = fmtDate(new Date(r.date));
-      const stato = r.status==='alto' ? 'ALLARME' : 'OK';
-      const t = isFinite(r.temp)? r.temp.toString().replace('.',',') : '';
-      const min = isFinite(r.min)? r.min.toString().replace('.',',') : '';
-      const max = isFinite(r.max)? r.max.toString().replace('.',',') : '';
-      let cella=''; let subject=r.subject||'';
-      const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
-      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
-      const row = [f.name, d, stato, t, min, max, cella.replaceAll(';',','), subject.replaceAll(';',',')];
-      lines.push(row.map(v => /[;"\n]/.test(v) ? `"${v.replaceAll('"','""')}"` : v).join(';'));
-    });
-  }
-  downloadFile(`storico_${rangeKey}_${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'), 'text/csv;charset=utf-8;');
-}
-
-function printPage(){
-  // Aggiorna footer stampa con loghi e data
-  const pf = document.querySelector('.print-footer'); if (!pf) return;
-  document.getElementById('printDate').textContent = fmtDate(new Date());
-  const site = document.getElementById('printLogoSite');
-  const dev  = document.getElementById('printLogoDev');
-  site.src = cfg.LOGO_URL || '';
-  dev.src  = cfg.DEV_LOGO_URL || '';
-  pf.classList.remove('hidden');
-  window.print();
-  // (niente cleanup necessario in genere)
-}
-
-/**************** IMPOSTAZIONI & STORICO (UI) ****************/
-function populateFilialeSelect(){ const sel = $('#filialeSelect'); sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join(''); }
-
-function renderImpostazioni(){
-  $('#usernameInput').value = state.username || '';
-
-  // Branding inputs (opzionali, solo se esistono)
-  const logoIn = $('#logoUrlInput');
-  const iconIn = $('#iconUrlInput');
-  const devIn  = $('#devLogoUrlInput');
-  if (logoIn) logoIn.value = cfg.LOGO_URL || '';
-  if (iconIn) iconIn.value = cfg.ICON_URL || '';
-  if (devIn)  devIn.value  = cfg.DEV_LOGO_URL || '';
-
-  const list = $('#filialiList'); 
-  list.innerHTML = '';
-  (state.filiali||[]).forEach(f=>{
-    const card = el(`<div class="glass rounded-xl p-3">
-  <div class="grid md:grid-cols-12 gap-3 items-start">
-    <label class="block text-sm text-slate-300 md:col-span-3">Nome
-      <input data-k="name" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
-    </label>
-    <label class="block text-sm text-slate-300 md:col-span-3">Email storico
-      <input data-k="email" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
-    </label>
-    <label class="block text-sm text-slate-300 md:col-span-2">Provider
-      <select data-k="streamProvider" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2">
-        <option value="jitsi" ${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
-        <option value="vdo" ${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
-        <option value="whep" ${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
-      </select>
-    </label>
-
-    <div data-group="jitsi" class="md:col-span-4" style="${f.streamProvider==='jitsi'?'':'display:none'}">
-      <label class="block text-sm text-slate-300">Jitsi domain
-        <input data-k="jitsiDomain" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiDomain||'meet.jit.si'}" />
-      </label>
-      <label class="block text-sm text-slate-300">Room
-        <input data-k="jitsiRoom" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiRoom||''}" />
-      </label>
-      <label class="block text-sm text-slate-300">Password (visibile)
-        <input data-k="jitsiPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiPass||''}" />
-      </label>
-    </div>
-
-    <div data-group="vdo" class="md:col-span-3" style="${f.streamProvider==='vdo'?'':'display:none'}">
-      <label class="block text-sm text-slate-300">VDO View ID
-        <input data-k="vdoViewId" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoViewId||''}" />
-      </label>
-      <label class="block text-sm text-slate-300">VDO Password
-        <input data-k="vdoPassword" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoPassword||''}" />
-      </label>
-    </div>
-
-    <div data-group="whep" class="md:col-span-4" style="${f.streamProvider==='whep'?'':'display:none'}">
-      <label class="block text-sm text-slate-300">URL WHEP (HTTPS)
-        <input data-k="streamUrl" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" />
-      </label>
-      <label class="block text-sm text-slate-300">ID
-        <input data-k="streamUser" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
-      </label>
-      <label class="block text-sm text-slate-300">Password
-        <input data-k="streamPass" class="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
-      </label>
-      <label class="flex items-center gap-2 text-sm text-slate-300 mt-2">
-        <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500"> Audio (se supportato)
-      </label>
-    </div>
-
-    <div class="md:col-span-12 flex flex-wrap gap-2 justify-between mt-1">
-      <div class="flex gap-2">
-        <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri live</button>
-        <button data-act="provider" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri su Provider</button>
-      </div>
-      <div class="flex gap-2">
-        <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
-        <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
-      </div>
-    </div>
-  </div>
-</div>`);
-
-    // Provider switcher
-    card.querySelector('[data-k="streamProvider"]').addEventListener('change', (e)=>{
-      const v = e.target.value;
-      card.querySelector('[data-group="jitsi"]').style.display = v==='jitsi' ? '' : 'none';
-      card.querySelector('[data-group="vdo"]').style.display   = v==='vdo'   ? '' : 'none';
-      card.querySelector('[data-group="whep"]').style.display  = v==='whep'  ? '' : 'none';
-    });
-    card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
-      card.querySelectorAll('[data-k]').forEach(inp=>{
-        const k = inp.dataset.k;
-        if (inp.type==='checkbox') f[k] = inp.checked;
-        else f[k] = inp.value;
-      });
-      saveState(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
-      alert('Salvato.');
-    });
-    card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
-      if(!confirm('Eliminare la filiale?')) return;
-      state.history[f.id] = [];
-      state.filiali = state.filiali.filter(x=>x.id!==f.id);
-      saveState(); renderImpostazioni(); populateFilialeSelect(); checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
-    });
-    card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
-      $('#filialeSelect').value = f.id; startLiveForCurrent(); go('home');
-    });
-    card.querySelector('[data-act="provider"]').addEventListener('click', ()=> openOnProvider(f));
-    list.appendChild(card);
-  });
-}
-
-/**************** AUTH (gapi + GIS) ****************/
-async function waitForGapiLoad(maxMs = 10000){
+async function waitForGapiLoad(maxMs=10000){
   const t0 = Date.now();
-  while (!window.gapi?.load) { if (Date.now() - t0 > maxMs) throw new Error("gapi non caricato"); await new Promise(r => setTimeout(r, 50)); }
+  while (!window.gapi?.load) { if (Date.now()-t0 > maxMs) throw new Error("gapi non caricato"); await new Promise(r=>setTimeout(r,50)); }
 }
 async function initGapi(){
   await waitForGapiLoad();
@@ -1111,43 +509,121 @@ async function initGapi(){
     gapi.load('client', async ()=>{
       try{
         const opts = { discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"] };
-        if (window.cfg?.API_KEY) opts.apiKey = window.cfg.API_KEY;
+        if (cfg.API_KEY) opts.apiKey = cfg.API_KEY;
         await gapi.client.init(opts);
         resolve();
-      }catch(e){ reject(e) }
+      }catch(e){ reject(e); }
     });
   });
 }
+function initGIS(){
+  if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
+    alert('Devi impostare il Google OAuth CLIENT_ID.');
+    openAdvancedModal();
+    throw new Error('CLIENT_ID mancante');
+  }
+  if (tokenClient) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: cfg.CLIENT_ID,
+    scope: (cfg?.SCOPES || DEFAULTS.SCOPES),
+    hint: cfg.LOGIN_HINT || undefined,
+    callback: (resp)=>{ if (resp?.access_token){ gapi.client.setToken({ access_token: resp.access_token }); updateGmailStatusUI(); } }
+  });
+}
+async function signIn(prompt=''){ return new Promise((resolve, reject)=>{ try{ tokenClient.callback=(r)=> r?.access_token? resolve(r): reject(r); tokenClient.requestAccessToken({ prompt, hint: cfg.LOGIN_HINT || '' }); }catch(e){ reject(e);} }); }
+async function signOut(){
+  try{
+    const tk = gapi?.client?.getToken?.();
+    if (tk?.access_token){
+      google.accounts.oauth2.revoke(tk.access_token, ()=>{});
+      gapi.client.setToken(null);
+    }
+  }catch(e){ console.warn('signOut', e); }
+}
 
-/**************** GMAIL: parsing (allarme ma temp nel range = OK) ****************/
-async function listMessages(q, max=200){ let msgs=[], pageToken; do{ const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken}); const d=res.result; if(d.messages) msgs.push(...d.messages); pageToken=d.nextPageToken } while(pageToken && msgs.length<max); return msgs }
-async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result }
+async function trySilentSignIn(){
+  try{
+    if (!window.gapi?.client) await initGapi();
+    if (!tokenClient) initGIS();
+    return await signIn(''); // prompt vuoto = silent se possibile
+  }catch{ return null; }
+}
+
+async function updateGmailStatusUI(){
+  const el = document.querySelector(".gmail-status");
+  const text = $("#gmail-status-text");
+  const connected = gmailService.isConnected();
+  if (el){
+    el.classList.toggle("connected", connected);
+    el.classList.toggle("error", false);
+  }
+  if (text) text.textContent = connected ? "Gmail connesso" : "Gmail non connesso";
+  $('#quickStats').textContent = connected ? 'Sincronizzazione attiva. Sto monitorando gli allarmi…' : 'Accedi a Gmail per sincronizzare gli allarmi.';
+}
+
+function startGmailPolling(){
+  stopGmailPolling();
+  gmailTick(); // run now
+  gmailPollHandle = setInterval(gmailTick, cfg.GMAIL_POLL_MS || DEFAULTS.GMAIL_POLL_MS);
+}
+function stopGmailPolling(){
+  if (gmailPollHandle){ clearInterval(gmailPollHandle); gmailPollHandle = null; }
+}
+async function gmailTick(){
+  try{
+    if (gmailService.isConnected()) await gmailService.fetchEmails();
+    await updateGmailStatusUI();
+  }catch(e){
+    const el = document.querySelector(".gmail-status");
+    if (el) el.classList.add("error");
+    const text = $("#gmail-status-text");
+    if (text) text.textContent = "Gmail: errore";
+    console.error('gmailTick', e);
+  }
+}
+
+/* Gmail API helpers */
+async function listMessages(q, max=300){
+  let msgs=[], pageToken, rounds=0;
+  do{
+    const res=await gapi.client.gmail.users.messages.list({userId:'me', q, maxResults:100, pageToken});
+    const d=res.result;
+    if(d.messages) msgs.push(...d.messages);
+    pageToken=d.nextPageToken;
+    rounds++;
+  } while(pageToken && msgs.length<max && rounds<10);
+  return msgs;
+}
+async function getMessage(id){ const res=await gapi.client.gmail.users.messages.get({userId:'me', id, format:'full'}); return res.result; }
 function decodeBody(body){ try{ return decodeURIComponent(escape(window.atob((body||'').replace(/-/g,'+').replace(/_/g,'/')))); }catch{ return '' } }
-function getHeader(msg, name){ const h = msg.payload.headers.find(h=>h.name.toLowerCase()===name.toLowerCase()); return h? h.value: '' }
+function getHeader(msg, name){ const h=(msg.payload?.headers||[]).find(h=> h.name?.toLowerCase()===name.toLowerCase()); return h? h.value:''; }
 
 function parseTemperatures(subject, body){
   const s = normalizeText(subject); const b = normalizeText(body);
-  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i) || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i);
-  const mRange = b.match(/Dovrebbe:\s*da\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i);
-  let temp = mTemp ? toNumber(mTemp[1]) : NaN; const min = mRange ? toNumber(mRange[1]) : NaN; const max = mRange ? toNumber(mRange[2]) : NaN;
-  if(!isFinite(temp)){ const near = b.match(/(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i); if (near) temp = toNumber(near[1]); }
+  const rxNear = /(-?\d+(?:[.,]\d+)?)(?=\s*(?:°\s*[Cc]|gradi))/i;
+  const mTemp = b.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i) || s.match(/temperatura[^.\n\r]*?\b(?:è\s*di|di)\s*(-?\d+(?:[.,]\d+)?)/i) || b.match(rxNear);
+  const mRange = b.match(/\b(dovrebbe|range|limiti?)\b[^.\n\r]*?\bda\s*(-?\d+(?:[.,]\d+)?)\s*a\s*(-?\d+(?:[.,]\d+)?)/i);
+  let temp = mTemp ? toNumber(mTemp[1] || mTemp[0]) : NaN;
+  const min = mRange ? toNumber(mRange[2]) : NaN;
+  const max = mRange ? toNumber(mRange[3]) : NaN;
   if(!isFinite(temp)){
     const all = [...b.matchAll(/-?\d+(?:[.,]\d+)?/g)].map(m=>({v:toNumber(m[0]), i:m.index}));
-    if (mRange) { const rs = mRange.index, re = rs + mRange[0].length; const candidates = all.filter(n => n.i < rs || n.i > re); if (candidates.length) temp = candidates[0].v; }
-    else if (all.length){ temp = all[0].v; }
+    if (mRange) {
+      const rs = mRange.index, re = rs + mRange[0].length;
+      const candidates = all.filter(n => n.i < rs || n.i > re);
+      if (candidates.length) temp = candidates[0].v;
+    } else if (all.length){ temp = all[0].v; }
   }
   return { temp, min, max };
 }
-
 function inferStatusSmart(subject, body){
   const txt = (subject + '\n' + body).toLowerCase();
-  const saysAlarm = /(allarme|alert|warning|alto|high|critical|critico)/.test(txt);
+  const saysAlarm   = /(allarme|alert|warning|alto|high|critical|critico)/.test(txt);
   const saysRestore = /(ripristin|rientrat|tornat|normalizzat|ritornat|ok|risolt|cleared|resolved)/.test(txt) && /temperatura|temp/.test(txt);
   if(saysRestore && !saysAlarm) return 'ok';
   if(saysAlarm) return 'alto';
   return null;
 }
-
 function extractCellAndFiliale(subject){
   const m = (subject||'').match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
   if(m) return { cella: m[1].trim(), filiale: m[2].trim() };
@@ -1161,7 +637,8 @@ async function fetchAlarms(){
     const msg = await getMessage(m.id);
     const subject = getHeader(msg,'Subject')||'(senza oggetto)';
     const d = new Date(Number(msg.internalDate));
-    let body=''; (function extract(part){ if(!part) return;
+    let body=''; (function extract(part){
+      if(!part) return;
       if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; }
       if(part.parts) part.parts.forEach(extract);
       if(part.mimeType==='text/html' && !body && part.body?.data){ body = decodeBody(part.body.data).replace(/<[^>]+>/g,' '); }
@@ -1169,10 +646,7 @@ async function fetchAlarms(){
 
     let status = inferStatusSmart(subject, body);
     const { temp, min, max } = parseTemperatures(subject, body);
-
-    if(status==='alto' && isFinite(temp) && isFinite(min) && isFinite(max) && min <= temp && temp <= max){
-      status = 'ok';
-    }
+    if(status==='alto' && isFinite(temp) && isFinite(min) && isFinite(max) && min <= temp && temp <= max){ status = 'ok'; }
     if(!status) continue;
 
     const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
@@ -1199,86 +673,664 @@ async function fetchAlarms(){
     state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000);
   }
   saveState();
-  checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc();
-  if(location.hash==='#storico') renderStorico();
+  refreshUIAfterData();
 }
 
-/**************** ADVANCED MODAL ****************/
-function openAdvancedModal() {
-  const modal = $('#advModal'); const gate = $('#advGate'); const body = $('#advBody');
-  if (!modal || !gate || !body) return;
-  modal.classList.add('show'); gate.classList.remove('hidden'); body.classList.add('hidden');
-  const host = location.host; $('#originsHint').textContent = `https://${host}`;
-  $('#advClientId').value = cfg?.CLIENT_ID || '';
-  $('#advApiKey').value = cfg?.API_KEY || '';
-  $('#advGmailQuery').value = cfg?.GMAIL_QUERY || '';
-  $('#advTempRx').value = cfg?.TEMP_RX || '';
-  $('#advLoginHint').value = cfg?.LOGIN_HINT || '';
-  $('#advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '';
-  setTimeout(()=>{ $('#advPwd').focus(); }, 100);
+/* ===================== LIVE ===================== */
+let webrtcSession = null;
+let jitsiApi = null;
+
+function cleanupWebRTC(){
+  try{
+    if(webrtcSession?.pc){
+      webrtcSession.pc.getTransceivers?.().forEach(t=>t.stop?.());
+      webrtcSession.pc.getSenders?.().forEach(s=>s.track?.stop?.());
+      webrtcSession.pc.getReceivers?.().forEach(r=>r.track?.stop?.());
+      webrtcSession.pc.close?.();
+    }
+  }catch{}
+  webrtcSession = null;
+}
+async function stopWhepResource(){ if(webrtcSession?.resourceUrl){ try{ await fetch(webrtcSession.resourceUrl, { method:'DELETE', mode:'cors', headers: webrtcSession.authHeaders || {} }); }catch{} } }
+function destroyJitsi(){ try{ jitsiApi?.dispose?.(); }catch{} jitsiApi = null; }
+
+function startJitsi(f) {
+  destroyJitsi();
+  const box = $('#jitsiContainer');
+  const frame = $('#liveFrame');
+  const vid = $('#webrtcVideo');
+  const none = $('#noStream');
+
+  if (!f.jitsiDomain || !f.jitsiRoom) {
+    none.classList.remove('hidden'); box.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden');
+    showError('Config Jitsi incompleta (domain/room).'); return;
+  }
+  none.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden'); box.classList.remove('hidden');
+
+  const domain = f.jitsiDomain || 'meet.jit.si';
+  const options = {
+    roomName: f.jitsiRoom,
+    parentNode: box,
+    width: '100%', height: '100%',
+    configOverwrite: { prejoinPageEnabled: false, disableDeepLinking: true, startWithAudioMuted: true, startWithVideoMuted: true },
+    interfaceConfigOverwrite: { TOOLBAR_BUTTONS: ['microphone','camera','desktop','fullscreen','hangup'] },
+    userInfo: { displayName: state.username || 'Viewer' }
+  };
+  try{
+    jitsiApi = new JitsiMeetExternalAPI(domain, options);
+    if (f.jitsiPass) {
+      jitsiApi.addListener('videoConferenceJoined', () => jitsiApi.executeCommand('password', f.jitsiPass));
+      jitsiApi.addListener('passwordRequired',      () => jitsiApi.executeCommand('password', f.jitsiPass));
+    }
+  }catch(e){
+    showError('Errore init Jitsi: ' + (e?.message || e));
+    box.classList.add('hidden'); none.classList.remove('hidden');
+  }
+}
+function buildVdoViewUrl(id, pwd, label, rawUrl){
+  if (rawUrl && /vdo\.ninja/.test(rawUrl)) {
+    const u = new URL(rawUrl);
+    u.searchParams.set('cleanoutput','1'); u.searchParams.set('autostart','1'); u.searchParams.set('embed','1');
+    if (label) u.searchParams.set('label', label);
+    return u.toString();
+  }
+  const p = new URLSearchParams();
+  if (id)  p.set('view', id);
+  if (pwd) { p.set('password', pwd); p.set('p', pwd); }
+  p.set('cleanoutput','1'); p.set('autostart','1'); p.set('embed','1');
+  if (label) p.set('label', label);
+  return `https://vdo.ninja/?${p.toString()}`;
+}
+function startVdo(f){
+  destroyJitsi();
+  const box = $('#jitsiContainer');
+  const frame = $('#liveFrame');
+  const vid = $('#webrtcVideo');
+  const none = $('#noStream');
+
+  if (!f.vdoViewId && !/vdo\.ninja/.test(f.streamUrl||'')) {
+    showError('VDO.Ninja: View ID mancante.');
+    frame.classList.add('hidden'); box.classList.add('hidden'); vid.classList.add('hidden'); none.classList.remove('hidden');
+    return;
+  }
+  const url = buildVdoViewUrl(f.vdoViewId || '', f.vdoPassword || '', f.name || 'Live', f.streamUrl);
+  frame.src = url;
+  frame.classList.remove('hidden'); box.classList.add('hidden'); vid.classList.add('hidden'); none.classList.add('hidden');
+}
+async function startWhep(){
+  const none = $('#noStream');
+  none.classList.remove('hidden');
+  setStatus('WHEP non configurato');
+  showError('WHEP disabilitato (usa Jitsi o VDO.Ninja).');
 }
 
-/**************** BRANDING ****************/
+function updateLiveToolbar(){
+  const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
+  if(!f){ $('#liveProvider').textContent='—'; $('#liveSid').textContent='—'; $('#livePwd').textContent='—'; return; }
+  if (f.streamProvider === 'jitsi'){
+    $('#liveProvider').textContent = 'Jitsi';
+    $('#liveSid').textContent = f.jitsiRoom || '—';
+    $('#livePwd').textContent = f.jitsiPass || '—';
+  } else if (f.streamProvider === 'vdo'){
+    $('#liveProvider').textContent = 'VDO.Ninja';
+    $('#liveSid').textContent = f.vdoViewId || '—';
+    $('#livePwd').textContent = f.vdoPassword || '—';
+  } else {
+    $('#liveProvider').textContent = 'WHEP/Worker';
+    $('#liveSid').textContent = f.streamUser || '—';
+    $('#livePwd').textContent = f.streamPass || '—';
+  }
+}
+function openOnProvider(f) {
+  if (f.streamProvider === 'jitsi') {
+    const url = `https://${f.jitsiDomain||'meet.jit.si'}/${encodeURIComponent(f.jitsiRoom||'')}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } else if (f.streamProvider === 'vdo') {
+    const url = buildVdoViewUrl(f.vdoViewId||'', f.vdoPassword||'', f.name||'Live', f.streamUrl);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } else {
+    const url = f.streamUrl; if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+async function startLiveForCurrent(){
+  const frame = $('#liveFrame'); const video = $('#webrtcVideo'); const none = $('#noStream');
+  const jitsiBox = $('#jitsiContainer');
+  frame.classList.add('hidden'); video.classList.add('hidden'); none.classList.remove('hidden'); jitsiBox.classList.add('hidden');
+  setStatus(''); showError('');
+  await stopWhepResource(); cleanupWebRTC(); destroyJitsi();
+
+  const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
+  if(!f){ showError('Nessuna filiale selezionata.'); return; }
+  updateLiveToolbar();
+
+  if (f.streamProvider === 'vdo'){ startVdo(f); setStatus('VDO.Ninja'); return; }
+  if (f.streamProvider === 'jitsi'){ startJitsi(f); setStatus('Jitsi Meet'); return; }
+  startWhep();
+}
+
+/* ===================== UI RENDER ===================== */
+function uiBindLiveSizer(){
+  const input = $('#liveSize'); const box = $('.stream-box');
+  if (!input || !box) return;
+  let val = localStorage.getItem('live_h') || input.value || '75';
+  input.value = val; box.style.setProperty('--live-h', val + 'svh');
+  input.addEventListener('input', ()=>{ val=input.value; localStorage.setItem('live_h', val); box.style.setProperty('--live-h', val+'svh'); });
+}
+function computeFilialeHasActiveAlarm(fid){
+  const rows = (state.history[fid]||[]).slice().sort((a,b)=>a.date-b.date);
+  const lastByCell = new Map();
+  for(const r of rows){ const key = r.cellKey || statusCellKey(r.subject); lastByCell.set(key, r.status); }
+  for(const st of lastByCell.values()){ if(st==='alto') return true; }
+  return false;
+}
+function runCheckFiliali(){
+  const wrap = $('#checkFilialiRows'); wrap.innerHTML = '';
+  (state.filiali||[]).forEach(filiale=>{
+    const rows = state.history[filiale.id] || [];
+    const last = rows.slice().sort((a,b)=>b.date-a.date)[0] || null;
+    const hasActive = computeFilialeHasActiveAlarm(filiale.id);
+    const txt = hasActive ? 'ALLARME' : 'OK';
+    const when = last ? ' · ' + fmtDate(new Date(last.date)) : '';
+    const row = el(`<div class="flex items-center justify-between text-sm">
+      <div class="w-56 truncate">${filiale.name}</div>
+      <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 rounded-md ${hasActive?'bg-red-500/15 text-red-300 border border-red-500/30':'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">${txt}</span>
+        <span class="opacity-70">${when}</span>
+      </div>
+    </div>`);
+    wrap.appendChild(row);
+  });
+}
+function uiRenderFilialiDesc(){
+  const wrap = $('#filialiDescWrap'); wrap.innerHTML = '';
+  state.filiali.forEach(filiale=>{
+    const rows = state.history[filiale.id] || [];
+    const hasActive = computeFilialeHasActiveAlarm(filiale.id);
+    const last = rows.length ? rows.slice().sort((a,b)=>b.date-a.date)[0] : null;
+    let cred = '';
+    if (filiale.streamProvider === 'jitsi')
+      cred = `Room: <code>${filiale.jitsiRoom||'—'}</code> · Pass: <code>${filiale.jitsiPass||'—'}</code>`;
+    else if (filiale.streamProvider === 'vdo')
+      cred = `View: <code>${filiale.vdoViewId||'—'}</code> · Pass: <code>${filiale.vdoPassword||'—'}</code>`;
+    else
+      cred = `Endpoint: <code>${(filiale.streamUrl||'').replace(/^https?:\/\//,'').replace(/\/.*/,'')||'—'}</code>`;
+    const card = el(`<div class="glass rounded-xl p-3">
+      <div class="flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">${filiale.name}</div>
+          <div class="text-xs opacity-70 mt-1">${cred}</div>
+        </div>
+        <div>${hasActive
+          ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
+          : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>'}</div>
+        <button class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600 text-xs" data-open-live="${filiale.id}">Apri live</button>
+        <button class="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-xs" data-open-provider="${filiale.id}">Apri su Provider</button>
+        <button class="px-2 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-xs" data-ai-report="${filiale.id}">Report IA</button>
+      </div>
+      ${last? `<div class="text-xs opacity-60 mt-1">Ultimo evento: ${fmtDate(new Date(last.date))}</div>`:''}
+    </div>`);
+    card.querySelector('[data-open-live]').addEventListener('click', ()=>{
+      $('#filialeSelect').value = filiale.id; startLiveForCurrent(); document.querySelector('.stream-box')?.scrollIntoView({behavior:'smooth', block:'center'});
+    });
+    card.querySelector('[data-open-provider]').addEventListener('click', ()=> openOnProvider(filiale));
+    card.querySelector('[data-ai-report]').addEventListener('click', ()=> openAIReport(filiale.id, filiale.name));
+    wrap.appendChild(card);
+  });
+}
+function checkFilialiStatus(){
+  const bar = $('#statusBar'); const badges = $('#statusBadges'); badges.innerHTML = '';
+  const items = state.filiali.map(f=>{
+    const rows = (state.history[f.id]||[]);
+    const last = rows.slice().sort((a,b)=>b.date-a.date)[0];
+    const isAlarm = computeFilialeHasActiveAlarm(f.id);
+    return { name:f.name, last, isAlarm };
+  });
+  if(!items.length){ bar.classList.add('hidden'); return }
+  items.forEach(it=>{
+    const color = it.isAlarm? 'bg-red-500/15 text-red-300 border border-red-500/30' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+    badges.appendChild(el(`<span class="px-2 py-1 rounded-md ${color} text-xs">${it.name}${it.last? ' · '+fmtDate(new Date(it.last.date)) : ''}</span>`));
+  });
+  bar.classList.remove('hidden');
+}
+function populateFilialeSelect(){
+  const sel = $('#filialeSelect'); sel.innerHTML = (state.filiali||[]).map(f=>`<option value="${f.id}">${f.name}</option>`).join('');
+}
+
+/* Storico */
+let currentRange = 'all';
+function getCutoff(rangeKey){
+  const now = Date.now();
+  if (rangeKey==='24h') return now - 24*3600*1000;
+  if (rangeKey==='7d')  return now - 7*24*3600*1000;
+  if (rangeKey==='30d') return now - 30*24*3600*1000;
+  return 0;
+}
+function filterRowsByRange(rows, rangeKey){
+  const cutoff = getCutoff(rangeKey);
+  return cutoff ? rows.filter(r=> r.date >= cutoff) : rows.slice();
+}
+function renderStorico(){
+  const wrap = $('#storicoWrap'); wrap.innerHTML = '';
+  const rangeKey = currentRange;
+  for(const f of state.filiali){
+    const allRows = (state.history[f.id]||[]).slice().sort((a,b)=>b.date-a.date);
+    const rows = filterRowsByRange(allRows, rangeKey);
+    const openCount = (()=>{
+      const lastByCell=new Map();
+      for(const r of allRows.slice().reverse()){ const key=r.cellKey||statusCellKey(r.subject); lastByCell.set(key,r.status); }
+      let c=0; for(const st of lastByCell.values()){ if(st==='alto') c++; } return c;
+    })();
+    const section = el(`<div class="glass rounded-2xl p-5 animate-fade">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-medium">${f.name}</div>
+        <div class="text-xs opacity-70">${rows.length} eventi nel periodo · ${openCount} allarmi aperti</div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="opacity-70">
+            <tr>
+              <th class="text-left py-2 pr-4">Data</th>
+              <th class="text-left py-2 pr-4">Stato</th>
+              <th class="text-left py-2 pr-4">Temperatura</th>
+              <th class="text-left py-2 pr-4">Range</th>
+              <th class="text-left py-2 pr-4">Cella/Descrizione</th>
+              <th class="text-left py-2 pr-4">Oggetto</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>`);
+    const tbody = section.querySelector('tbody');
+    rows.forEach(r=>{
+      let cella=''; let subject=r.subject||''; let minmax='—';
+      const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
+      if (isFinite(r.min) && isFinite(r.max)) minmax = r.min + '–' + r.max + ' °C';
+      const badge = (r.status==='alto')
+        ? '<span class="px-2 py-0.5 text-xs rounded-md bg-red-500/15 text-red-300 border border-red-500/30">ALLARME</span>'
+        : '<span class="px-2 py-0.5 text-xs rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">OK</span>';
+      const tr = el(`<tr class="border-t border-white/10 hover:bg-white/5 cursor-pointer">
+        <td class="py-2 pr-4 whitespace-nowrap">${fmtDate(new Date(r.date))}</td>
+        <td class="py-2 pr-4">${badge}</td>
+        <td class="py-2 pr-4">${isFinite(r.temp)? (r.temp.toFixed(1)+' °C') : '—'}</td>
+        <td class="py-2 pr-4">${minmax}</td>
+        <td class="py-2 pr-4">${cella}</td>
+        <td class="py-2 pr-4">${subject}</td>
+      </tr>`);
+      tr.addEventListener('click', ()=> uiOpenRowDetails(r, f.name));
+      tbody.appendChild(tr);
+    });
+    wrap.appendChild(section);
+  }
+}
+function exportCsv(){
+  const rangeKey = currentRange;
+  const cutoff = getCutoff(rangeKey);
+  const lines = [];
+  lines.push(['Filiale','Data','Stato','Temperatura','Min','Max','Cella/Descrizione','Oggetto'].join(';'));
+  for(const f of state.filiali){
+    const rows = (state.history[f.id]||[]);
+    rows.filter(r => !cutoff || r.date>=cutoff).sort((a,b)=>a.date-b.date).forEach(r=>{
+      const d = fmtDate(new Date(r.date));
+      const stato = r.status==='alto' ? 'ALLARME' : 'OK';
+      const t = isFinite(r.temp)? r.temp.toString().replace('.',',') : '';
+      const min = isFinite(r.min)? r.min.toString().replace('.',',') : '';
+      const max = isFinite(r.max)? r.max.toString().replace('.',',') : '';
+      let cella=''; let subject=r.subject||'';
+      const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+      if (m) cella = m[1].trim() + ' (' + m[2].trim() + ')'; else cella = subject;
+      const row = [f.name, d, stato, t, min, max, cella.replaceAll(';',','), subject.replaceAll(';',',')];
+      lines.push(row.map(v => /[;"\n]/.test(v) ? `"${v.replaceAll('"','""')}"` : v).join(';'));
+    });
+  }
+  downloadFile(`storico_${rangeKey}_${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'), 'text/csv;charset=utf-8;');
+}
+function printPage(){
+  const pf = document.querySelector('.print-footer'); if (!pf) return;
+  $('#printDate').textContent = fmtDate(new Date());
+  $('#printLogoSite').src = cfg.LOGO_URL || '';
+  $('#printLogoDev').src  = cfg.DEV_LOGO_URL || '';
+  pf.classList.remove('hidden');
+  window.print();
+}
+
+/* Dettaglio riga */
+function uiOpenRowDetails(row, filialeName){
+  const modal = $('#rowModal'); const body = $('#rowModalBody');
+  let cella = ''; let filiale = filialeName || ''; let subject = row.subject || '';
+  let temp = isFinite(row.temp) ? row.temp.toFixed(1) + ' °C' : '—'; let minmax = '—';
+  const m = subject.match(/Allarme temperatura:\s*([^\(]+)\s*\(([^\)]+)\)/i);
+  if (m) { cella = m[1].trim(); filiale = m[2].trim(); } else { cella = subject; }
+  if (isFinite(row.min) && isFinite(row.max)) { minmax = row.min + '–' + row.max + ' °C'; }
+  body.innerHTML = `
+    <div class="mb-2 text-lg font-semibold">${cella}</div>
+    <div class="mb-2 text-sm opacity-70">Filiale: <span class="font-medium">${filiale}</span></div>
+    <div class="mb-2 text-sm opacity-70">Temperatura: <span class="font-medium">${temp}</span></div>
+    <div class="mb-2 text-sm opacity-70">Range min–max: <span class="font-medium">${minmax}</span></div>
+    <div class="mb-2 text-sm opacity-70">Data/ora: <span class="font-medium">${fmtDate(new Date(row.date))}</span></div>
+    <div class="mb-2 text-sm opacity-70">Oggetto: <span class="font-medium">${subject}</span></div>
+    <div class="mt-4 flex justify-end"><button id="rowModalClose" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Chiudi</button></div>
+  `;
+  modal.classList.add('show');
+  $('#rowModalClose').onclick = () => modal.classList.remove('show');
+  modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
+}
+
+/* ===================== REPORT IA ===================== */
+function openAIReport(fid=null, filialeName=null){
+  // Se fid null => globale
+  const title = fid ? `Report IA — ${filialeName||fid} — ultime 24 ore` : `Report IA — Globale — ultime 24 ore`;
+  $('#aiReportTitle').textContent = title;
+
+  // Raccogli dati ultime 24h
+  const cutoff = Date.now() - 24*3600*1000;
+  const dataset = [];
+  const heat = new Map(); // key=cella label, value={alto:boolean}
+  const listWrap = $('#aiReportList'); listWrap.innerHTML='';
+  const rowsByFil = fid ? [[fid, state.history[fid]||[]]] : Object.entries(state.history);
+
+  for (const [k, rows] of rowsByFil){
+    const f = state.filiali.find(x=>x.id===k);
+    const name = f?.name || k;
+    (rows||[]).filter(r=> r.date>=cutoff).sort((a,b)=>a.date-b.date).forEach(r=>{
+      dataset.push({ t:r.date, v: Number.isFinite(r.temp)? r.temp:null, min:r.min, max:r.max, status:r.status, subj:r.subject, fid:k, fname:name, cell: r.cellKey||statusCellKey(r.subject) });
+      // heatmap status
+      const prev = heat.get(r.cellKey||r.subject) || false;
+      heat.set(r.cellKey||r.subject, r.status==='alto' ? true : prev);
+      // lista eventi
+      const rowEl = el(`<div class="text-sm border-b border-white/10 pb-2">
+        <div class="flex items-center justify-between gap-3">
+          <div class="font-medium">${r.status==='alto'?'🔴 ALLARME':'🟢 OK'} · ${f?.name||k}</div>
+          <div class="text-xs opacity-60">${fmtDate(new Date(r.date))}</div>
+        </div>
+        <div class="opacity-80">${r.subject}</div>
+        <div class="text-xs opacity-60">T: ${Number.isFinite(r.temp)? r.temp.toFixed(1)+'°C':'—'} · Range: ${Number.isFinite(r.min)&&Number.isFinite(r.max)? r.min+'–'+r.max+'°C':'—'}</div>
+      </div>`);
+      listWrap.appendChild(rowEl);
+    });
+  }
+
+  // KPI
+  const kpiBox = $('#aiReportKpi'); kpiBox.innerHTML='';
+  const tot = dataset.length;
+  const openSet = new Map();
+  // active alarms per cell: ultimo stato
+  const lastPerCell = new Map();
+  for(const d of dataset){ lastPerCell.set(d.cell, d.status); }
+  for(const [cell, st] of lastPerCell){ if(st==='alto') openSet.set(cell, true); }
+  const openCount = openSet.size;
+
+  let tSum=0, tCnt=0, tMin=+Infinity, tMax=-Infinity;
+  dataset.forEach(d=>{
+    if (Number.isFinite(d.v)){
+      tSum+=d.v; tCnt++;
+      if (d.v<tMin) tMin=d.v; if (d.v>tMax) tMax=d.v;
+    }
+  });
+  const tAvg = tCnt? (tSum/tCnt):NaN;
+
+  const kpis = [
+    { label:'Eventi', value: String(tot) },
+    { label:'Allarmi attivi stimati', value: String(openCount) },
+    { label:'Temperatura media', value: Number.isFinite(tAvg)? tAvg.toFixed(1)+' °C':'—' },
+    { label:'Min / Max', value: `${Number.isFinite(tMin)?tMin.toFixed(1)+'°C':'—'} / ${Number.isFinite(tMax)?tMax.toFixed(1)+'°C':'—'}` }
+  ];
+  kpis.forEach(k=>{
+    kpiBox.appendChild(el(`<div class="p-3 rounded-lg bg-white/5 border border-white/10">
+      <div class="text-xs opacity-70">${k.label}</div>
+      <div class="text-xl font-semibold">${k.value}</div>
+    </div>`));
+  });
+
+  // Chart SVG
+  const chartWrap = $('#aiReportChart'); chartWrap.innerHTML='';
+  if (dataset.length){
+    const w=720, h=160, pad=18;
+    const xs = dataset.map(d=>d.t); const ys = dataset.filter(d=>Number.isFinite(d.v)).map(d=>d.v);
+    const minX = Math.min(...xs), maxX=Math.max(...xs);
+    const minY = ys.length? Math.min(...ys):0, maxY = ys.length? Math.max(...ys):1;
+
+    function sx(x){ return pad + (w-2*pad) * ((x-minX)/(maxX-minX || 1)); }
+    function sy(y){ const r = pad + (h-2*pad) * (1 - ((y-minY)/(maxY-minY || 1))); return r; }
+
+    const path = [];
+    dataset.forEach((d,i)=>{
+      if (!Number.isFinite(d.v)) return;
+      const X = sx(d.t), Y=sy(d.v);
+      path.push((path.length? 'L':'M') + X + ' ' + Y);
+    });
+
+    const svg = el(`<svg viewBox="0 0 ${w} ${h}" class="w-full h-40">
+      <defs>
+        <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="currentColor" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="${w}" height="${h}" fill="black" opacity=".25"></rect>
+      <g stroke="currentColor" stroke-opacity=".15">
+        <line x1="${pad}" y1="${sy(minY)}" x2="${w-pad}" y2="${sy(minY)}"></line>
+        <line x1="${pad}" y1="${sy(maxY)}" x2="${w-pad}" y2="${sy(maxY)}"></line>
+      </g>
+      <path d="${path.join(' ')}" stroke="currentColor" stroke-width="2" fill="none"></path>
+    </svg>`);
+    chartWrap.appendChild(svg);
+  } else {
+    chartWrap.appendChild(el('<div class="text-xs opacity-60">Nessun dato</div>'));
+  }
+
+  // Heatmap
+  const heatWrap = $('#aiReportHeatmap'); heatWrap.innerHTML='';
+  if (heat.size){
+    for(const [cell, isAlarm] of heat.entries()){
+      heatWrap.appendChild(el(`<span class="px-2 py-1 text-xs rounded border ${isAlarm? 'bg-red-500/15 text-red-300 border-red-500/30':'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'}">${cell}</span>`));
+    }
+  } else {
+    heatWrap.appendChild(el('<span class="text-xs opacity-60">Nessuna cella rilevata.</span>'));
+  }
+
+  // Download TXT
+  $('#btnReportDownloadTxt').onclick = ()=>{
+    const lines = [];
+    lines.push(title);
+    kpis.forEach(k=> lines.push(`${k.label}: ${k.value}`));
+    lines.push('');
+    lines.push('Eventi:');
+    dataset.slice(-50).forEach(d=>{
+      lines.push(`${fmtDate(new Date(d.t))} · ${d.status.toUpperCase()} · ${d.fname} · ${Number.isFinite(d.v)? d.v.toFixed(1)+'°C':'—'} · ${d.subj}`);
+    });
+    downloadFile(`report_${fid||'globale'}_${new Date().toISOString().slice(0,10)}.txt`, lines.join('\n'), 'text/plain;charset=utf-8;');
+  };
+
+  // Apri modal
+  const modal = $('#aiReportModal'); modal.classList.add('show');
+}
+
+/* ===================== ROUTER / NAV ===================== */
+const routes = ['home','storico','impostazioni'];
+function setActiveTab(hash){
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    const r=b.getAttribute('data-route');
+    const active = (r===hash);
+    b.classList.toggle('bg-white/10', active);
+    b.classList.toggle('font-semibold', active);
+  });
+}
+function go(route){
+  routes.forEach(r=> $('#route-'+r).classList.toggle('hidden', r!==route));
+  $('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1);
+  setActiveTab('#'+route);
+  if(route==='storico') renderStorico();
+  if(route==='home'){ checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer(); }
+  if(route==='impostazioni') renderImpostazioni();
+  history.replaceState(null, '', '#'+route);
+}
+window.addEventListener('hashchange', ()=>{ const r=(location.hash||'#home').slice(1); if(routes.includes(r)) go(r); });
+
+/* ===================== IMPOSTAZIONI ===================== */
+function renderImpostazioni(){
+  $('#usernameInput').value = state.username || '';
+  $('#logoUrlInput').value = cfg.LOGO_URL || '';
+  $('#iconUrlInput').value = cfg.ICON_URL || '';
+  $('#devLogoUrlInput').value = cfg.DEV_LOGO_URL || '';
+
+  const list = $('#filialiList'); list.innerHTML='';
+  (state.filiali||[]).forEach(f=>{
+    const card = el(`<div class="glass rounded-xl p-3">
+  <div class="grid md:grid-cols-12 gap-3 items-start">
+    <label class="block text-sm md:col-span-3">Nome
+      <input data-k="name" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.name}" />
+    </label>
+    <label class="block text-sm md:col-span-3">Email storico
+      <input data-k="email" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.email}" />
+    </label>
+    <label class="block text-sm md:col-span-2">Provider
+      <select data-k="streamProvider" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2">
+        <option value="jitsi" ${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
+        <option value="vdo" ${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
+        <option value="whep" ${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
+      </select>
+    </label>
+
+    <div data-group="jitsi" class="md:col-span-4" style="${f.streamProvider==='jitsi'?'':'display:none'}">
+      <label class="block text-sm">Jitsi domain
+        <input data-k="jitsiDomain" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiDomain||'meet.jit.si'}" />
+      </label>
+      <label class="block text-sm">Room
+        <input data-k="jitsiRoom" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiRoom||''}" />
+      </label>
+      <label class="block text-sm">Password (visibile)
+        <input data-k="jitsiPass" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.jitsiPass||''}" />
+      </label>
+    </div>
+
+    <div data-group="vdo" class="md:col-span-3" style="${f.streamProvider==='vdo'?'':'display:none'}">
+      <label class="block text-sm">VDO View ID
+        <input data-k="vdoViewId" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoViewId||''}" />
+      </label>
+      <label class="block text-sm">VDO Password
+        <input data-k="vdoPassword" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.vdoPassword||''}" />
+      </label>
+    </div>
+
+    <div data-group="whep" class="md:col-span-4" style="${f.streamProvider==='whep'?'':'display:none'}">
+      <label class="block text-sm">URL WHEP (HTTPS)
+        <input data-k="streamUrl" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUrl||''}" />
+      </label>
+      <label class="block text-sm">ID
+        <input data-k="streamUser" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.streamUser||''}" />
+      </label>
+      <label class="block text-sm">Password
+        <input data-k="streamPass" class="mt-1 w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2" value="${f.streamPass||''}" />
+      </label>
+      <label class="flex items-center gap-2 text-sm mt-2">
+        <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500"> Audio (se supportato)
+      </label>
+    </div>
+
+    <div class="md:col-span-12 flex flex-wrap gap-2 justify-between mt-1">
+      <div class="flex gap-2">
+        <button data-act="open" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600">Apri live</button>
+        <button data-act="provider" class="px-3 py-1.5 rounded-lg bg-blue-500/90 hover:bg-blue-500">Apri su Provider</button>
+      </div>
+      <div class="flex gap-2">
+        <button data-act="save" class="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-600">Salva</button>
+        <button data-act="del" class="px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-600/80">Elimina</button>
+      </div>
+    </div>
+  </div>
+</div>`);
+
+    card.querySelector('[data-k="streamProvider"]').addEventListener('change', (e)=>{
+      const v = e.target.value;
+      card.querySelector('[data-group="jitsi"]').style.display = v==='jitsi' ? '' : 'none';
+      card.querySelector('[data-group="vdo"]').style.display   = v==='vdo'   ? '' : 'none';
+      card.querySelector('[data-group="whep"]').style.display  = v==='whep'  ? '' : 'none';
+    });
+    card.querySelector('[data-act="save"]').addEventListener('click', ()=>{
+      card.querySelectorAll('[data-k]').forEach(inp=>{
+        const k = inp.dataset.k;
+        if (inp.type==='checkbox') f[k] = inp.checked;
+        else f[k] = inp.value;
+      });
+      saveState(); populateFilialeSelect(); refreshUIAfterData();
+      alert('Salvato.');
+    });
+    card.querySelector('[data-act="del"]').addEventListener('click', ()=>{
+      if(!confirm('Eliminare la filiale?')) return;
+      state.history[f.id] = [];
+      state.filiali = state.filiali.filter(x=>x.id!==f.id);
+      saveState(); renderImpostazioni(); populateFilialeSelect(); refreshUIAfterData();
+    });
+    card.querySelector('[data-act="open"]').addEventListener('click', ()=>{
+      $('#filialeSelect').value = f.id; startLiveForCurrent(); go('home');
+    });
+    card.querySelector('[data-act="provider"]').addEventListener('click', ()=> openOnProvider(f));
+    list.appendChild(card);
+  });
+}
+
+/* ===================== BRANDING ===================== */
 function applyBranding(){
   const logoBox = $('#brandLogoBox');
   const logoImg = $('#brandLogoImg');
   if (cfg.LOGO_URL) {
-    logoImg.src = cfg.LOGO_URL;
-    logoImg.classList.remove('hidden');
-    logoBox.classList.remove('brand-grad');
+    logoImg.src = cfg.LOGO_URL; logoImg.classList.remove('hidden'); logoBox.classList.remove('brand-grad');
   } else {
-    logoImg.classList.add('hidden');
-    logoImg.removeAttribute('src');
-    logoBox.classList.add('brand-grad');
+    logoImg.classList.add('hidden'); logoImg.removeAttribute('src'); logoBox.classList.add('brand-grad');
   }
-  const fav = $('#dynamic-favicon');
-  if (cfg.ICON_URL){ fav.href = cfg.ICON_URL; }
-
-  // Aggiorna loghi sidebar
-  const sidebarSiteLogo = document.getElementById('sidebarSiteLogo');
-  const sidebarDevLogo = document.getElementById('sidebarDevLogo');
-  if (sidebarSiteLogo) {
-    sidebarSiteLogo.src = cfg.LOGO_URL || '';
-  }
-  if (sidebarDevLogo) {
-    sidebarDevLogo.src = cfg.DEV_LOGO_URL || '';
-  }
-
-  // stampa footer (immagini caricate in printPage)
+  const fav = $('#dynamic-favicon'); if (cfg.ICON_URL){ fav.href = cfg.ICON_URL; }
+  const sidebarSiteLogo = $('#sidebarSiteLogo'); if (sidebarSiteLogo) sidebarSiteLogo.src = cfg.LOGO_URL || '';
+  const sidebarDevLogo = $('#sidebarDevLogo'); if (sidebarDevLogo) sidebarDevLogo.src = cfg.DEV_LOGO_URL || '';
 }
 
-/**************** BOOT ****************/
+/* ===================== GLOBAL HELPERS ===================== */
+function refreshUIAfterData(){
+  checkFilialiStatus();
+  runCheckFiliali();
+  uiRenderFilialiDesc();
+  if(location.hash==='#storico') renderStorico();
+  // quickStats
+  const totalEvents = Object.values(state.history).reduce((acc, arr)=> acc + (arr?.length||0), 0);
+  $('#quickStats').textContent = totalEvents ? `Eventi totali: ${totalEvents}` : ($('#quickStats').textContent||'');
+}
+
+/* ===================== BOOT ===================== */
 window.addEventListener('DOMContentLoaded', async ()=>{
   loadState();
   populateFilialeSelect();
 
-  try {
-    await initGapi();
-    initGIS();
-    const r = await trySilentSignIn();
-    if (r?.access_token) { await fetchAlarms(); }
-  } catch (_) { /* se fallisce resta il bottone Accedi */ }
+  // Tema toggle
+  $('#themeToggle').addEventListener('click', ()=>{
+    const cur = cfg.THEME || 'auto';
+    const next = (cur==='auto')? 'dark' : (cur==='dark'? 'light':'auto');
+    cfg.THEME = next; saveState(); applyTheme(next);
+  });
 
-  document.querySelectorAll('.route-btn').forEach(b=> b.addEventListener('click', ()=> go(b.dataset.route.slice(1))));
+  // Router
+  document.querySelectorAll('.tab-btn').forEach(b=> b.addEventListener('click', ()=> go(b.dataset.route.slice(1))));
   const initial = (location.hash || '#home'); setActiveTab(initial); go((initial||'#home').slice(1));
 
-  $('#filialeSelect').addEventListener('change', ()=> startLiveForCurrent());
+  // Filiale select
   if (state.filiali[0]) $('#filialeSelect').value = state.filiali[0].id;
-
-  checkFilialiStatus(); runCheckFiliali(); uiRenderFilialiDesc(); uiBindLiveSizer();
+  $('#filialeSelect').addEventListener('change', ()=> startLiveForCurrent());
 
   // LIVE controls
+  uiBindLiveSizer();
   $('#btnReconnect').addEventListener('click', ()=> startLiveForCurrent());
   $('#btnOpenProvider').addEventListener('click', ()=>{
     const f = state.filiali.find(x=>x.id === $('#filialeSelect').value);
-    if(!f) return;
-    openOnProvider(f);
+    if(!f) return; openOnProvider(f);
   });
   $('#btnCopySid').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); if(!f) return; const id = (f.streamProvider==='jitsi')?f.jitsiRoom:(f.streamProvider==='vdo'?f.vdoViewId:f.streamUser); copyTxt(id||''); });
   $('#btnCopyPwd').addEventListener('click', ()=>{ const f=state.filiali.find(x=>x.id===$('#filialeSelect').value); if(!f) return; const pw = (f.streamProvider==='jitsi')?f.jitsiPass:(f.streamProvider==='vdo'?f.vdoPassword:f.streamPass); copyTxt(pw||''); });
 
-  // Profilo & filiali
+  // Profilo & Branding
   $('#usernameInput').addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
+  $('#btnSaveBranding').addEventListener('click', ()=>{ cfg.LOGO_URL=$('#logoUrlInput').value.trim(); cfg.ICON_URL=$('#iconUrlInput').value.trim(); cfg.DEV_LOGO_URL=$('#devLogoUrlInput').value.trim(); saveState(); applyBranding(); alert('Loghi salvati.'); });
+
+  // Aggiungi filiale
   $('#btnAddFiliale').addEventListener('click', ()=>{
     state.filiali.push({
       id: (crypto?.randomUUID?.() || ('f'+Date.now())),
@@ -1298,24 +1350,21 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
-  // Branding save (aggancia solo se il bottone c'è)
-  const btnSaveBranding = $('#btnSaveBranding');
-  if (btnSaveBranding){
-    btnSaveBranding.addEventListener('click', ()=>{
-      const L = ($('#logoUrlInput')?.value || '').trim();
-      const I = ($('#iconUrlInput')?.value || '').trim();
-      const D = ($('#devLogoUrlInput')?.value || '').trim();
-      cfg.LOGO_URL     = L;
-      cfg.ICON_URL     = I;
-      cfg.DEV_LOGO_URL = D;
-      saveState(); 
-      applyBranding(); 
-      alert('Loghi salvati.');
-    });
-  }
-
   // Advanced modal
-  $('#btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
+  function openAdvancedModal() {
+    const modal = $('#advModal'); const gate = $('#advGate'); const body = $('#advBody');
+    modal.classList.add('show'); gate.classList.remove('hidden'); body.classList.add('hidden');
+    const host = location.host; $('#originsHint').textContent = `https://${host}`;
+    $('#advClientId').value = cfg?.CLIENT_ID || '';
+    $('#advApiKey').value = cfg?.API_KEY || '';
+    $('#advGmailQuery').value = cfg?.GMAIL_QUERY || '';
+    $('#advTempRx').value = cfg?.TEMP_RX || '';
+    $('#advLoginHint').value = cfg?.LOGIN_HINT || '';
+    $('#advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '';
+    setTimeout(()=>{ $('#advPwd').focus(); }, 100);
+  }
+  window.openAdvancedModal = openAdvancedModal;
+  $('#btnAdvanced').addEventListener('click', ()=> openAdvancedModal());
   $('#advClose').onclick = ()=> $('#advModal').classList.remove('show');
   $('#advUnlock').onclick = ()=>{ if($('#advPwd').value==='979851'){ $('#advGate').classList.add('hidden'); $('#advBody').classList.remove('hidden'); setTimeout(()=>$('#advClientId').focus(),100); } else { alert('Password errata'); } };
   $('#advSave').onclick = ()=>{
@@ -1329,19 +1378,16 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     initGapi().then(()=>{ try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }).catch(e=> alert('Errore init: ' + (e?.message || e)));
     $('#advModal')?.classList.remove('show');
   };
-  $('#advTest').onclick = async ()=>{ try{ signOut(); await signIn(); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); } };
+  $('#advTest').onclick = async ()=>{
+    try{ await signOut(); await signIn('consent'); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
+  };
   $('#advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); };
 
-  async function forceAccountChooser(){
-    try{
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
-      if (!window.gapi?.client) { await initGapi(); }
-      if (!window.tokenClient) { initGIS(); }
-      signOut(); await new Promise(r=>setTimeout(r,50)); await signIn(); await fetchAlarms();
-    }catch(e){ alert('Errore login: ' + (e?.message || e)); }
-  }
-  $('#btnSignIn').onclick = forceAccountChooser;
-  $('#btnChangeAccount').onclick = forceAccountChooser;
+  // Report global
+  $('#btnReportGlobal').addEventListener('click', ()=> openAIReport(null, null));
+  // Chiudi report
+  $('#aiReportClose').onclick = ()=> $('#aiReportModal').classList.remove('show');
+  $('#aiReportModal').addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
 
   // Filtri storico + export
   document.querySelectorAll('.range-btn').forEach(b=>{
@@ -1353,19 +1399,37 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   $('#btnExportCsv').addEventListener('click', exportCsv);
   $('#btnPrint').addEventListener('click', printPage);
 
-  // Avvia live
+  // Gmail boot
+  try {
+    await initGapi();
+    initGIS();
+    const r = await trySilentSignIn();
+    if (r?.access_token) { await fetchAlarms(); }
+  } catch (_) { /* resta il bottone Accedi */ }
+  updateGmailStatusUI();
+
+  // Signin/change account
+  async function forceAccountChooser(){
+    try{
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
+      if (!window.gapi?.client) { await initGapi(); }
+      if (!tokenClient) { initGIS(); }
+      await signOut(); await new Promise(r=>setTimeout(r,50));
+      await signIn('consent');
+      await fetchAlarms();
+    }catch(e){ alert('Errore login: ' + (e?.message || e)); }
+  }
+  $('#btnSignIn').onclick = forceAccountChooser;
+  $('#btnChangeAccount').onclick = forceAccountChooser;
+
+  // Avvio
   startLiveForCurrent();
   startGmailPolling();
 
-  // cleanup
-  window.addEventListener('beforeunload', ()=>{ 
-    stopWhepResource(); 
-    cleanupWebRTC(); 
-    destroyJitsi(); 
-    stopGmailPolling();
+  // Cleanup
+  window.addEventListener('beforeunload', ()=>{
+    stopWhepResource(); cleanupWebRTC(); destroyJitsi(); stopGmailPolling();
   });
-  
-  // Aggiorna stato Gmail quando la finestra diventa attiva
   window.addEventListener('focus', gmailTick);
 });
 </script>
