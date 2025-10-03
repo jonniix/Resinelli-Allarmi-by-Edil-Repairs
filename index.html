@@ -24,11 +24,10 @@
       theme: {
         extend: {
           colors: {
-            bgl1: "#ffffff",
-            bgl2: "#f8fafc",
             acc:  "#2563eb",
             emerald: "#10b981",
-            rose: "#f43f5e",
+            rose: "#e11d48",
+            slateLine: "#E5E7EB",
           },
           boxShadow: {
             glass: "0 10px 25px rgba(0,0,0,.06)"
@@ -38,11 +37,7 @@
             slide: { "0%": {transform:"translateY(6px)", opacity:.0}, "100%":{transform:"translateY(0)", opacity:1} },
             pulseSoft: { "0%,100%":{opacity:.7}, "50%":{opacity:1} },
             spin: { to: { transform: "rotate(360deg)" } },
-            scan: {
-              "0%": { transform: "translateX(-100%)" },
-              "60%": { transform: "translateX(100%)" },
-              "100%": { transform: "translateX(100%)" }
-            }
+            scan: { "0%": { transform: "translateX(-100%)" }, "60%": { transform: "translateX(100%)" }, "100%": { transform: "translateX(100%)" } }
           },
           animation: {
             fade: "fade .25s ease both",
@@ -51,6 +46,7 @@
             spin: "spin 1s linear infinite",
             scan: "scan 2.2s infinite",
           },
+          borderRadius: { xl2: "1rem" }
         }
       }
     }
@@ -59,17 +55,9 @@
   <style>
     :root{ --live-h: 75svh; }
     html,body{height:100%}
-    body{
-      background:#fff;
-      color:#0f172a;
-    }
+    body{ background:#fff; color:#0f172a; }
     .brand-grad{ background:linear-gradient(90deg, #60a5fa, #22d3ee); }
-    .glass {
-      background: rgba(255,255,255,.9);
-      backdrop-filter: blur(10px);
-      border: 1px solid #E5E7EB;
-      box-shadow: 0 10px 25px rgba(0,0,0,.06);
-    }
+    .glass { background: rgba(255,255,255,.9); backdrop-filter: blur(10px); border: 1px solid #E5E7EB; box-shadow: 0 10px 25px rgba(0,0,0,.06); }
     .stream-box{ position:relative; width:100%; aspect-ratio:9/16; max-height:var(--live-h,75svh); background:#000; border:1px solid #E5E7EB; border-radius:14px; overflow:hidden }
     .stream-media, .stream-frame{ width:100%; height:100%; object-fit:contain; background:#000; border:0 }
     .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:70 }
@@ -89,21 +77,23 @@
     .spinner{ width:16px; height:16px; border:2px solid rgba(0,0,0,.15); border-top-color: rgba(0,0,0,.6); border-radius:9999px; animation: spin 1s linear infinite; }
 
     /* Bottoni unificati */
-    .btn{
-      @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-white border border-[#E5E7EB] shadow-sm transition;
-    }
+    .btn{ display:inline-flex; align-items:center; justify-content:center; gap:.5rem; padding:.5rem .75rem; border-radius: .8rem; font-size:.875rem; font-weight:600; background:#fff; border:1px solid #E5E7EB; box-shadow: 0 1px 0 rgba(0,0,0,.02); transition: box-shadow .15s, transform .15s; }
     .btn:hover{ box-shadow: 0 6px 16px rgba(0,0,0,.08); transform: translateY(-1px); }
     .btn:active{ transform: translateY(0); }
     .btn:focus{ outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
-    .btn-primary{ @apply bg-blue-600 text-white border-blue-600; }
+    .btn-primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
     .btn-primary:hover{ filter: brightness(1.05); }
-    .btn-positive{ @apply bg-emerald-600 text-white border-emerald-600; }
-    .btn-negative{ @apply bg-rose-600 text-white border-rose-600; }
+    .btn-positive{ background:#10b981; color:#fff; border-color:#10b981; }
+    .btn-negative{ background:#e11d48; color:#fff; border-color:#e11d48; }
+    .btn-ghost{ background:transparent; }
 
     /* Bubbles chat IA */
     .bubble{ display:flex; align-items:flex-start; gap:.6rem; }
     .bubble .avatar{ width:28px; height:28px; border-radius:9999px; background:#e5f0ff; display:grid; place-items:center; font-size:14px; }
     .bubble .msg{ background:#F8FAFC; border:1px solid #E5E7EB; border-radius:14px; padding:.6rem .75rem; line-height:1.25rem; }
+
+    /* Badge */
+    .badge{ display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .5rem; border-radius:.6rem; font-size:.75rem; border:1px solid #E5E7EB; background:#fff; }
 
     /* Print */
     @media print{
@@ -136,7 +126,6 @@
           <button data-route="#impostazioni" class="tab-btn btn" aria-label="Vai a Impostazioni">Impostazioni</button>
         </nav>
         <div class="flex items-center gap-2">
-          <!-- Niente toggle tema -->
           <button id="btnAdvanced" class="btn" title="Impostazioni avanzate" aria-label="Impostazioni avanzate">⚙️</button>
           <button id="btnSignIn" class="btn btn-primary" aria-label="Accedi a Gmail">Accedi a Gmail</button>
           <button id="btnChangeAccount" class="btn" aria-label="Cambia account">Cambia account</button>
@@ -150,7 +139,7 @@
     <div class="flex flex-col md:flex-row gap-6">
 
       <!-- Sidebar -->
-      <aside class="w-full md:w-64 flex-shrink-0">
+      <aside class="w-full md:w-72 flex-shrink-0">
         <div class="glass rounded-2xl mb-6 p-4 space-y-4">
           <!-- Logos -->
           <div class="flex items-center justify-between">
@@ -162,10 +151,24 @@
             <span class="dot inline-block w-2.5 h-2.5 rounded-full bg-slate-400" aria-hidden="true"></span>
             <span id="gmail-status-text" aria-live="polite">Gmail</span>
             <span class="spinner" role="status" aria-live="polite" aria-label="Caricamento Gmail" id="gmailSpinner" style="display:none"></span>
+            <button id="btnRefresh" class="btn text-xs ml-auto" aria-label="Rileggi Gmail">Aggiorna</button>
           </div>
+
           <!-- Quick stats -->
           <div class="text-xs opacity-70" id="quickStats">
             Nessun dato ancora. Accedi a Gmail per sincronizzare.
+          </div>
+
+          <!-- Pannello veloce KPI 24h -->
+          <div id="quickKpi" class="grid grid-cols-2 gap-2 text-center">
+            <div class="p-2 border rounded-lg">
+              <div class="text-[11px] opacity-70">Attivi</div>
+              <div id="kAttivi" class="text-lg font-semibold text-rose-600">0</div>
+            </div>
+            <div class="p-2 border rounded-lg">
+              <div class="text-[11px] opacity-70">Risolti 24h</div>
+              <div id="kRisolti" class="text-lg font-semibold text-emerald-600">0</div>
+            </div>
           </div>
         </div>
       </aside>
@@ -270,7 +273,18 @@
             <button class="range-btn btn text-sm" data-range="7d">7 giorni</button>
             <button class="range-btn btn text-sm" data-range="30d">30 giorni</button>
             <button class="range-btn btn text-sm" data-range="all">Tutto</button>
-            <div class="ml-auto flex items-center gap-2">
+
+            <div class="flex items-center gap-2 ml-auto">
+              <input id="histSearch" class="bg-white border border-slateLine rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="Cerca cella/oggetto...">
+              <select id="histStatus" class="bg-white border border-slateLine rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200" aria-label="Filtro stato">
+                <option value="all">Tutti</option>
+                <option value="alto">Solo allarmi</option>
+                <option value="ok">Solo OK</option>
+              </select>
+              <select id="histSort" class="bg-white border border-slateLine rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200" aria-label="Ordinamento">
+                <option value="date_desc">Data ↓</option>
+                <option value="date_asc">Data ↑</option>
+              </select>
               <button id="btnExportCsv" class="btn btn-positive text-sm">Esporta CSV</button>
               <button id="btnPrint" class="btn btn-primary text-sm">Stampa / PDF</button>
             </div>
@@ -296,7 +310,7 @@
             <div class="font-medium mb-3">Profilo</div>
             <div class="grid sm:grid-cols-2 gap-4">
               <label class="block text-sm">Nome utente
-                <input id="usernameInput" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="Es. Mario" />
+                <input id="usernameInput" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="Es. Mario" />
               </label>
             </div>
           </div>
@@ -305,13 +319,13 @@
             <div class="font-medium mb-3">Branding / Loghi</div>
             <div class="grid sm:grid-cols-3 gap-4">
               <label class="block text-sm">Logo header URL
-                <input id="logoUrlInput" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://..." />
+                <input id="logoUrlInput" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://..." />
               </label>
               <label class="block text-sm">Favicon URL
-                <input id="iconUrlInput" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://..." />
+                <input id="iconUrlInput" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://..." />
               </label>
               <label class="block text-sm">Logo sviluppatore URL
-                <input id="devLogoUrlInput" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://..." />
+                <input id="devLogoUrlInput" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://..." />
               </label>
             </div>
             <div class="mt-3">
@@ -350,32 +364,32 @@
       </div>
       <div id="advGate" class="space-y-3">
         <div class="text-sm">Inserisci password per sbloccare le impostazioni:</div>
-        <input id="advPwd" type="password" class="w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="Password" />
+        <input id="advPwd" type="password" class="w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="Password" />
         <button id="advUnlock" class="btn btn-primary">Sblocca</button>
       </div>
       <div id="advBody" class="hidden space-y-4">
         <div class="grid sm:grid-cols-2 gap-4">
           <label class="block text-sm">Google Client ID
-            <input id="advClientId" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="xxxx.apps.googleusercontent.com" />
+            <input id="advClientId" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="xxxx.apps.googleusercontent.com" />
           </label>
           <label class="block text-sm">Google API Key (opzionale)
-            <input id="advApiKey" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="AIza..." />
+            <input id="advApiKey" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="AIza..." />
           </label>
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
           <label class="block text-sm">Query Gmail allarmi (default)
-            <input id="advGmailQuery" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+            <input id="advGmailQuery" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
           </label>
           <label class="block text-sm">Regex temperatura
-            <input id="advTempRx" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+            <input id="advTempRx" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
           </label>
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
           <label class="block text-sm">Login hint (consiglia account)
-            <input id="advLoginHint" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="es. resinellialimentari@gmail.com" />
+            <input id="advLoginHint" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="es. resinellialimentari@gmail.com" />
           </label>
           <label class="block text-sm">Scopes (opzionale)
-            <input id="advScopes" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://www.googleapis.com/auth/gmail.readonly" />
+            <input id="advScopes" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="https://www.googleapis.com/auth/gmail.readonly" />
           </label>
         </div>
         <div class="text-xs opacity-70">Origin consigliata (GitHub Pages): <code id="originsHint"></code></div>
@@ -432,7 +446,7 @@
   <!-- ========== APP SCRIPT ========== -->
 <script>
 /* ===================== CONFIG / STATE ===================== */
-const APP_VERSION = 4; // per migrazioni future
+const APP_VERSION = 6;
 
 const DEFAULTS = {
   CLIENT_ID: "882609618607-c0e975cg1ughd4bi76hnee58c2ka6h2m.apps.googleusercontent.com",
@@ -453,11 +467,15 @@ const DEFAULT_FILIALI = [
   { id:'losone', name:'Resinelli Losone', email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:'Resinelli-losone', jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' }
 ];
 
-let state = { username: '', filiali: [], history: {}, version: APP_VERSION };
+/* Stato: aggiunti filialeNames + oauth (token persistito) */
+let state = { username: '', filiali: [], history: {}, version: APP_VERSION, filialeNames: {}, oauth: null };
 let cfg = { ...DEFAULTS };
 let tokenClient = null;
 let gmailPollHandle = null;
 let currentRange = '24h';
+let histSearchTerm = '';
+let histStatus = 'all';
+let histSort = 'date_desc';
 
 /* ===================== UTIL ===================== */
 const $ = (sel)=> document.querySelector(sel);
@@ -487,9 +505,12 @@ function loadState(){
       state.filiali = Array.isArray(s.filiali) && s.filiali.length ? s.filiali : JSON.parse(JSON.stringify(DEFAULT_FILIALI));
       state.history = s.history || {};
       state.version = s.version || APP_VERSION;
+      state.filialeNames = s.filialeNames || Object.fromEntries((state.filiali||[]).map(f => [f.id, f.name]));
+      state.oauth = s.oauth || null;
       cfg = { ...DEFAULTS, ...(s.cfg||{}) };
     } else {
       state.filiali = JSON.parse(JSON.stringify(DEFAULT_FILIALI));
+      state.filialeNames = Object.fromEntries((state.filiali||[]).map(f => [f.id, f.name]));
     }
   }catch(e){ console.warn('Storage load error', e); }
   applyBranding();
@@ -525,6 +546,41 @@ async function initGapi(){
     }catch(e){ reject(e); }
   });
 }
+
+/* ======= Persistenza token GIS: helpers ======= */
+function setAccessTokenFromResp(resp){
+  const at = resp?.access_token;
+  if (!at) return;
+  window.gapi?.client?.setToken?.({ access_token: at });
+  state.oauth = {
+    access_token: at,
+    expires_at: Date.now() + ((resp.expires_in || 3600) - 60)*1000 // rinnovo 1 min prima
+  };
+  saveState();
+}
+function isTokenValid(){
+  return !!state?.oauth?.access_token && Date.now() < (state.oauth.expires_at||0);
+}
+async function ensureToken(){
+  try{
+    if (!isTokenValid()){
+      await signIn('');
+    } else {
+      if (!gmailService.isConnected()) {
+        window.gapi?.client?.setToken?.({ access_token: state.oauth.access_token });
+      }
+    }
+  }catch(e){ /* silente */ }
+}
+function startTokenAutoRefresh(){
+  setInterval(async ()=>{
+    const msLeft = (state?.oauth?.expires_at||0) - Date.now();
+    if (!state?.oauth?.access_token || msLeft < 2*60*1000){
+      try { await signIn(''); } catch(_){}
+    }
+  }, 60*1000);
+}
+
 function initGIS(){
   if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
     alert('Devi impostare il Google OAuth CLIENT_ID.');
@@ -536,7 +592,13 @@ function initGIS(){
     client_id: cfg.CLIENT_ID,
     scope: (cfg?.SCOPES || DEFAULTS.SCOPES),
     hint: cfg.LOGIN_HINT || undefined,
-    callback: (resp)=>{ if (resp?.access_token){ window.gapi?.client?.setToken?.({ access_token: resp.access_token }); updateGmailStatusUI(); } }
+    callback: (resp)=>{
+      if (resp?.access_token){
+        window.gapi?.client?.setToken?.({ access_token: resp.access_token });
+        setAccessTokenFromResp(resp);
+        updateGmailStatusUI();
+      }
+    }
   });
 }
 async function signIn(prompt=''){
@@ -554,6 +616,7 @@ async function signOut(){
     if (tk?.access_token && window.google?.accounts?.oauth2){
       window.google.accounts.oauth2.revoke(tk.access_token, ()=>{});
       window.gapi.client.setToken(null);
+      state.oauth = null; saveState();
     }
   }catch(e){ console.warn('signOut', e); }
 }
@@ -561,35 +624,35 @@ async function trySilentSignIn(){
   try{
     if (!window.gapi?.client) await initGapi();
     if (!tokenClient) initGIS();
-    return await signIn(''); // silent se possibile
+    return await signIn('');
   }catch{ return null; }
 }
 
 async function updateGmailStatusUI(){
-  const box = document.querySelector(".gmail-status");
   const text = $("#gmail-status-text");
-  const sp = $("#gmailSpinner");
+  const dot = document.querySelector(".gmail-status .dot");
   const connected = gmailService.isConnected();
-  if (box) box.classList.toggle("connected", connected);
   if (text) text.textContent = connected ? "Gmail connesso" : "Gmail non connesso";
+  if (dot) dot.style.backgroundColor = connected ? "#10b981" : "#94a3b8";
   if ($('#quickStats')) $('#quickStats').textContent = connected ? 'Sincronizzazione attiva. Sto monitorando gli allarmi…' : 'Accedi a Gmail per sincronizzare gli allarmi.';
-  if (sp) sp.style.display = connected ? 'none' : 'none';
 }
 
 function startGmailPolling(){
   stopGmailPolling();
-  gmailTick(); // subito
+  gmailTick();
   gmailPollHandle = setInterval(gmailTick, cfg.GMAIL_POLL_MS || DEFAULTS.GMAIL_POLL_MS);
 }
 function stopGmailPolling(){ if (gmailPollHandle){ clearInterval(gmailPollHandle); gmailPollHandle = null; } }
 async function gmailTick(){
+  const sp = $('#gmailSpinner'); if (sp) sp.style.display='inline-block';
   try{
+    await ensureToken();
     if (gmailService.isConnected()) await gmailService.fetchEmails();
     await updateGmailStatusUI();
   }catch(e){
     const text = $("#gmail-status-text"); if (text) text.textContent = "Gmail: errore";
     console.error('gmailTick', e);
-  }
+  } finally { if (sp) sp.style.display='none'; }
 }
 
 /* Gmail API helpers */
@@ -688,9 +751,16 @@ async function fetchAlarms(){
       return $('#filialeSelect')?.value || state.filiali[0]?.id;
     })();
 
+    // Aggiorna mapping ID -> Nome quando possibile
+    if (filialeName) { state.filialeNames[fid] = filialeName; }
+
+    const displayName = (state.filiali||[]).find(x=>x.id===fid)?.name || filialeName || state.filialeNames[fid] || fid;
+
     const row = {
-      date:+d, temp, min, max, status, subject, id:m.id, bodyPlain: body,
-      cellKey: normalizeText(cella).toLowerCase()
+      id:m.id, date:+d, temp, min, max, status, subject,
+      bodyPlain: body, cellKey: normalizeText(cella).toLowerCase(),
+      fid, displayName,
+      messageId: getHeader(msg, 'Message-Id') || '' // per link ricerca
     };
     if(!state.history[fid]) state.history[fid]=[];
     if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
@@ -856,22 +926,19 @@ function build24hStats(stateObj){
     for(const r of rows){
       const cell = r.cellKey || statusCellKey(r.subject);
       celleSet.add(cell);
-      if (!cellStatus[fid]) cellStatus[fid] = {};
-      if (!cellStatus[fid][cell]) cellStatus[fid][cell] = [];
-      cellStatus[fid][cell].push(r);
-      if (r.status === 'alto') totAllarmi24h++;
-      if (r.status === 'alto' && (!lastEventTs || r.date > lastEventTs)) lastEventTs = r.date;
+      (cellStatus[fid] ||= {}); (cellStatus[fid][cell] ||= []).push(r);
+      if (r.status === 'alto') { totAllarmi24h++; lastEventTs = Math.max(lastEventTs||0, r.date); }
     }
   }
   for(const fid of Object.keys(cellStatus)){
     for(const cell of Object.keys(cellStatus[fid])){
       const events = cellStatus[fid][cell];
-      let prev = null;
+      let open = false;
       for(const e of events){
-        if (e.status==='alto') prev='alto';
-        else if (prev==='alto' && e.status==='ok'){ risolti24h++; prev=null; }
+        if (e.status==='alto' && !open) open=true;
+        else if (open && e.status==='ok'){ risolti24h++; open=false; }
       }
-      if (events.length && events[events.length-1].status==='alto') attivi++;
+      if (open) attivi++;
     }
   }
   return { attivi, totAllarmi24h, risolti24h, filialiCoinvolte: filialiSet.size, celleCoinvolte: celleSet.size, lastEventTs };
@@ -910,6 +977,9 @@ function renderHomeStats24h(){
     </div>
     <div class="mt-2 text-xs opacity-70">Ultimo evento: <span class="font-semibold">${s.lastEventTs ? fmtDate(new Date(s.lastEventTs)) : '—'}</span></div>
   `;
+  // Quick KPI in sidebar
+  $('#kAttivi') && ($('#kAttivi').textContent = s.attivi);
+  $('#kRisolti') && ($('#kRisolti').textContent = s.risolti24h);
 }
 
 /* ===================== IA REPORT (mini chat) ===================== */
@@ -918,7 +988,7 @@ function buildIAChatMessages(fid=null){
   const msgs = [];
   for(const fId of filiali){
     const fil = (state.filiali||[]).find(x=>x.id===fId);
-    const filName = fil?.name || fId;
+    const filName = fil?.name || state.filialeNames[fId] || fId;
     const rows = filterRowsByRange(state.history[fId]||[], '24h').sort((a,b)=>a.date-b.date);
     if (!rows.length) continue;
     const cells = {};
@@ -928,9 +998,8 @@ function buildIAChatMessages(fid=null){
     }
     for(const cell of Object.keys(cells)){
       const events = cells[cell];
-      // costruiamo intervalli alto -> ok
       let openStart = null;
-      events.forEach((ev,i)=>{
+      events.forEach((ev)=>{
         if (ev.status==='alto' && openStart==null) openStart = ev.date;
         if (openStart!=null && ev.status==='ok'){
           const t1 = fmtHHmm(openStart), t2 = fmtHHmm(ev.date);
@@ -974,7 +1043,6 @@ function openAIReport(fid=null, filialeName=null){
   const heat = new Map();
 
   for (const [k, rows] of rowsByFil){
-    const f = (state.filiali||[]).find(x=>x.id===k);
     const filteredRows = filterRowsByRange(rows||[], '24h').sort((a,b)=>a.date-b.date);
     if (!filteredRows.length) continue;
     filialiSet.add(k);
@@ -986,7 +1054,6 @@ function openAIReport(fid=null, filialeName=null){
       const prev = heat.get(cell) || false; heat.set(cell, r.status==='alto' ? true : prev);
     }
   }
-  // conta risolti/attivi
   for(const fid2 of Object.keys(cellStatus)){
     for(const cell of Object.keys(cellStatus[fid2])){
       const events = cellStatus[fid2][cell];
@@ -1098,7 +1165,7 @@ function checkFilialiStatus(){
     const last = rows[rows.length-1];
     const ok = last.status!=='alto';
     any = true;
-    bag.appendChild(el(`<span class="px-2 py-1 text-xs rounded border ${ok?'border-emerald-200 text-emerald-700 bg-emerald-50':'border-rose-200 text-rose-700 bg-rose-50'}">${f.name}: ${ok?'OK':'ALLARME'}</span>`));
+    bag.appendChild(el(`<span class="badge ${ok?'border-emerald-200 text-emerald-700 bg-emerald-50':'border-rose-200 text-rose-700 bg-rose-50'}">${f.name} ${ok? 'OK':'ALLARME'}</span>`));
   });
   bar.classList.toggle('hidden', !any);
 }
@@ -1139,15 +1206,82 @@ function uiRenderFilialiDesc(){
     wrap.appendChild(card);
   });
 }
+
+/* ===================== STORICO (con nome filiale corretto + funzioni) ===================== */
+function applyHistControlsHandlers(){
+  $('#histSearch')?.addEventListener('input', (e)=>{ histSearchTerm = (e.target.value||'').toLowerCase(); renderStorico(); });
+  $('#histStatus')?.addEventListener('change', (e)=>{ histStatus = e.target.value; renderStorico(); });
+  $('#histSort')?.addEventListener('change', (e)=>{ histSort = e.target.value; renderStorico(); });
+}
+function rowMatches(r){
+  const term = histSearchTerm;
+  const byText = !term || (r.subject?.toLowerCase().includes(term) || (r.cellKey||'').toLowerCase().includes(term));
+  const byStatus = (histStatus==='all') || (r.status===histStatus);
+  return byText && byStatus;
+}
+function sortRows(rows){
+  if (histSort==='date_asc') return rows.sort((a,b)=>a.date-b.date);
+  return rows.sort((a,b)=>b.date-a.date);
+}
+function openRowModal(fid, r){
+  const body = $('#rowModalBody'); const modal = $('#rowModal');
+  if (!body || !modal) return;
+  const displayName = (state.filiali||[]).find(x=>x.id===fid)?.name || state.filialeNames[fid] || r.displayName || fid;
+  const linkSearch = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('subject:"'+(r.subject||'')+'"')}`;
+  body.innerHTML = `
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <div class="text-lg font-semibold">${displayName}</div>
+        <div class="text-sm opacity-70">${fmtDate(new Date(r.date))}</div>
+      </div>
+      <button class="btn" id="rowClose" aria-label="Chiudi dettaglio">Chiudi</button>
+    </div>
+    <div class="mt-3 p-3 border rounded-lg bg-white">
+      <div class="text-sm"><b>Stato:</b> ${r.status==='alto'?'<span class="text-rose-700">ALLARME</span>':'<span class="text-emerald-700">OK</span>'}</div>
+      <div class="text-sm"><b>Cella:</b> ${r.cellKey || statusCellKey(r.subject)}</div>
+      <div class="text-sm"><b>Oggetto:</b> ${r.subject}</div>
+      ${Number.isFinite(r.temp)? `<div class="text-sm"><b>Temp rilevata:</b> ${r.temp.toFixed(1)}°C</div>`:''}
+      ${(Number.isFinite(r.min)||Number.isFinite(r.max))? `<div class="text-sm"><b>Range atteso:</b> ${Number.isFinite(r.min)?r.min.toFixed(1):'—'} – ${Number.isFinite(r.max)?r.max.toFixed(1):'—'}</div>`:''}
+    </div>
+    <div class="mt-3">
+      <div class="text-sm opacity-70 mb-1">Corpo email (estratto)</div>
+      <pre class="whitespace-pre-wrap text-sm border rounded-lg p-3 bg-white max-h-[40vh] overflow-auto">${(r.bodyPlain||'').trim()||'(vuoto)'}</pre>
+    </div>
+    <div class="mt-3 flex items-center gap-2">
+      <a class="btn btn-primary" href="${linkSearch}" target="_blank" rel="noopener noreferrer">Apri in Gmail</a>
+      <button class="btn" id="rowCopy" aria-label="Copia dettagli">Copia dettagli</button>
+    </div>
+  `;
+  body.querySelector('#rowClose')?.addEventListener('click', ()=> modal.classList.remove('show'));
+  body.querySelector('#rowCopy')?.addEventListener('click', ()=>{
+    const txt = `${displayName}\n${fmtDate(new Date(r.date))}\n${r.status.toUpperCase()} · ${r.cellKey}\n${r.subject}\n${(r.bodyPlain||'').trim()}`;
+    copyTxt(txt);
+  });
+  modal.classList.add('show');
+}
 function renderStorico(){
   const wrap = $('#storicoWrap'); if (!wrap) return;
   wrap.innerHTML='';
   const range = currentRange;
-  Object.keys(state.history||{}).forEach(fid=>{
-    const f = (state.filiali||[]).find(x=>x.id===fid);
-    const rows = filterRowsByRange(state.history[fid]||[], range).sort((a,b)=>b.date-a.date);
+
+  // ordina gruppi per nome visuale
+  const groups = Object.keys(state.history||{}).map(fid=>{
+    const rowsAll = filterRowsByRange(state.history[fid]||[], range);
+    const rows = sortRows(rowsAll.filter(rowMatches));
+    const displayName =
+      (state.filiali||[]).find(x=>x.id===fid)?.name ||
+      state.filialeNames[fid] ||
+      (rows[0]?.displayName) ||
+      fid; // FINALE: mai più UUID grezzo in vista
+    return { fid, displayName, rows };
+  }).sort((a,b)=> a.displayName.localeCompare(b.displayName, 'it'));
+
+  groups.forEach(({fid, displayName, rows})=>{
     const table = el(`<div class="glass rounded-xl p-4">
-      <div class="text-lg font-semibold mb-2">${f?.name || fid}</div>
+      <div class="flex items-center justify-between">
+        <div class="text-lg font-semibold mb-2">${displayName}</div>
+        <div class="text-xs opacity-70">Eventi: ${rows.length}</div>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead><tr class="text-left">
@@ -1166,13 +1300,16 @@ function renderStorico(){
       tb.appendChild(el(`<tr><td colspan="5" class="py-3 text-slate-500">Nessun evento</td></tr>`));
     } else {
       rows.forEach(r=>{
-        tb.appendChild(el(`<tr class="border-t">
+        const tr = el(`<tr class="border-t hover:bg-slate-50 cursor-pointer" tabindex="0">
           <td class="py-2 pr-3 whitespace-nowrap">${fmtDate(new Date(r.date))}</td>
           <td class="py-2 pr-3">${r.status==='alto'?'<span class="text-rose-700">ALLARME</span>':'<span class="text-emerald-700">OK</span>'}</td>
           <td class="py-2 pr-3">${r.cellKey || statusCellKey(r.subject)}</td>
           <td class="py-2 pr-3">${r.subject}</td>
           <td class="py-2 pr-3">${Number.isFinite(r.temp)? (r.temp.toFixed(1)+'°C') : '—'}</td>
-        </tr>`));
+        </tr>`);
+        tr.addEventListener('click', ()=> openRowModal(fid, r));
+        tr.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openRowModal(fid, r);} });
+        tb.appendChild(tr);
       });
     }
     wrap.appendChild(table);
@@ -1181,9 +1318,10 @@ function renderStorico(){
 function exportCsv(){
   const rowsOut = [['filiale','data','stato','cella','oggetto','temperatura']];
   for(const fid of Object.keys(state.history||{})){
-    const fil = (state.filiali||[]).find(x=>x.id===fid);
+    const filObj = (state.filiali||[]).find(x=>x.id===fid);
+    const filName = filObj?.name || state.filialeNames[fid] || (state.history[fid]?.[0]?.displayName) || fid;
     (state.history[fid]||[]).forEach(r=>{
-      rowsOut.push([fil?.name||fid, new Date(r.date).toISOString(), r.status, r.cellKey||statusCellKey(r.subject), r.subject, Number.isFinite(r.temp)?r.temp.toFixed(2):'']);
+      rowsOut.push([filName, new Date(r.date).toISOString(), r.status, r.cellKey||statusCellKey(r.subject), r.subject, Number.isFinite(r.temp)?r.temp.toFixed(2):'']);
     });
   }
   const csv = rowsOut.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -1281,12 +1419,14 @@ function renderImpostazioni(){
         if (inp.type==='checkbox') f[k] = inp.checked;
         else f[k] = inp.value;
       });
+      state.filialeNames[f.id] = f.name; // aggiorna mapping
       saveState(); populateFilialeSelect(); refreshUIAfterData();
       alert('Salvato.');
     });
     card.querySelector('[data-act="del"]')?.addEventListener('click', ()=>{
       if(!confirm('Eliminare la filiale?')) return;
       state.history[f.id] = [];
+      delete state.filialeNames[f.id];
       state.filiali = (state.filiali||[]).filter(x=>x.id!==f.id);
       saveState(); renderImpostazioni(); populateFilialeSelect(); refreshUIAfterData();
     });
@@ -1361,21 +1501,10 @@ window.addEventListener('DOMContentLoaded', async ()=>{
 
   // Aggiungi filiale
   $('#btnAddFiliale')?.addEventListener('click', ()=>{
-    state.filiali.push({
-      id: (crypto?.randomUUID?.() || ('f'+Date.now())),
-      name: 'Nuova filiale',
-      email: 'allarmi@edilrepairs.ch',
-      streamProvider: 'jitsi',
-      jitsiDomain: 'meet.jit.si',
-      jitsiRoom: '',
-      jitsiPass: '',
-      vdoViewId: '',
-      vdoPassword: '',
-      streamUrl: '',
-      streamUser: '',
-      streamPass: '',
-      streamAudio: false
-    });
+    const idNew = (crypto?.randomUUID?.() || ('f'+Date.now()));
+    const nf = { id: idNew, name: 'Nuova filiale', email: 'allarmi@edilrepairs.ch', streamProvider: 'jitsi', jitsiDomain: 'meet.jit.si', jitsiRoom: '', jitsiPass: '', vdoViewId: '', vdoPassword: '', streamUrl: '', streamUser: '', streamPass: '', streamAudio: false };
+    state.filiali.push(nf);
+    state.filialeNames[idNew] = nf.name;
     saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
@@ -1421,7 +1550,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   $('#aiReportClose') && ($('#aiReportClose').onclick = ()=> $('#aiReportModal')?.classList.remove('show'));
   $('#aiReportModal')?.addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
 
-  // Filtri storico + export
+  // Filtri storico + export + stampa + controlli
   document.querySelectorAll('.range-btn').forEach(b=>{
     b.addEventListener('click', ()=>{
       currentRange = b.dataset.range || 'all';
@@ -1430,29 +1559,31 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   });
   $('#btnExportCsv')?.addEventListener('click', exportCsv);
   $('#btnPrint')?.addEventListener('click', printPage);
+  applyHistControlsHandlers();
+
+  // Aggiorna manuale (sidebar)
+  $('#btnRefresh')?.addEventListener('click', gmailTick);
 
   /* Boot order garantito:
-     initGapi() → initGIS() → silent sign-in → fetchAlarms() → startLiveForCurrent() → startGmailPolling()
+     initGapi() → initGIS() → silent sign-in/restore → fetchAlarms() → startLiveForCurrent() → startGmailPolling()
   */
-  try {
-    await initGapi();
-  } catch (e) { console.warn('initGapi fallita', e); }
-  try {
-    initGIS();
-  } catch (e) { console.warn('initGIS fallita', e); }
-  try {
-    const r = await trySilentSignIn();
-    if (r?.access_token) {
-      try { await fetchAlarms(); } catch (e) { console.warn('fetchAlarms fallita dopo silent sign-in', e); }
-    }
-  } catch (e) { console.warn('silent sign-in fallito', e); }
-  try {
-    await startLiveForCurrent();
-  } catch (e) { console.warn('startLiveForCurrent fallita', e); }
-  try {
-    startGmailPolling();
-  } catch (e) { console.warn('startGmailPolling fallita', e); }
+  try { await initGapi(); } catch (e) { console.warn('initGapi fallita', e); }
+  try { initGIS(); } catch (e) { console.warn('initGIS fallita', e); }
 
+  try{
+    if (isTokenValid()){
+      window.gapi?.client?.setToken?.({ access_token: state.oauth.access_token });
+    }
+    await ensureToken();
+  }catch(e){ /* ignora */ }
+
+  try{
+    if (gmailService.isConnected()) { await fetchAlarms(); }
+  } catch(e){ console.warn('fetchAlarms iniziale fallita', e); }
+
+  try { await startLiveForCurrent(); } catch (e) { console.warn('startLiveForCurrent fallita', e); }
+  try { startGmailPolling(); } catch (e) { console.warn('startGmailPolling fallita', e); }
+  startTokenAutoRefresh();
   updateGmailStatusUI();
 
   // Signin/change account
@@ -1462,12 +1593,15 @@ window.addEventListener('DOMContentLoaded', async ()=>{
       if (!window.gapi?.client) { await initGapi(); }
       if (!tokenClient) { initGIS(); }
       await signOut(); await new Promise(r=>setTimeout(r,50));
-      await signIn('consent');
-      await fetchAlarms();
+      const r = await signIn('consent');
+      if (r?.access_token) await fetchAlarms();
     }catch(e){ alert('Errore login: ' + (e?.message || e)); }
   }
   $('#btnSignIn') && ($('#btnSignIn').onclick = forceAccountChooser);
   $('#btnChangeAccount') && ($('#btnChangeAccount').onclick = forceAccountChooser);
+
+  // Modal riga: chiudi clic overlay
+  $('#rowModal')?.addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
 
   // Cleanup
   window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); destroyJitsi(); stopGmailPolling(); });
