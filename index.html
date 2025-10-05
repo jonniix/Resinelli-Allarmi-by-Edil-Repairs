@@ -659,7 +659,7 @@ async function trySilentRefresh(){
 
   lastSilentTry = now;
   try{
-    if (!tokenClient) initGIS();
+    if (!tokenClient) await initGIS();
     await new Promise((resolve, reject)=>{
       tokenClient.callback = (r)=> r?.access_token ? resolve(r) : reject(r);
       tokenClient.requestAccessToken({ prompt: '', hint: cfg.LOGIN_HINT || '' });
@@ -678,16 +678,12 @@ async function trySilentRefresh(){
 // PATCH: async initGIS, waits for GIS to be ready
 async function initGIS(){
   if (tokenClient) return tokenClient;
-
-  // aspetta che il client OAuth sia disponibile (fino a 20s)
   await waitForGISLoad(20000);
-
   if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
     alert('Devi impostare il Google OAuth CLIENT_ID.');
     window.openAdvancedModal?.();
     throw new Error('CLIENT_ID mancante');
   }
-
   tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: cfg.CLIENT_ID,
     scope: (cfg?.SCOPES || DEFAULTS.SCOPES),
@@ -700,70 +696,37 @@ async function initGIS(){
       }
     }
   });
-
   return tokenClient;
 }
 
 async function signIn(prompt=''){
-  return new Promise((resolve, reject)=>{
+  return new Promise(async (resolve, reject)=>{
     try{
-      if (!tokenClient) { try{ initGIS(); }catch(e){ return reject(e); } }
+      if (!tokenClient) { try { await initGIS(); } catch(e){ return reject(e); } }
       tokenClient.callback=(r)=> r?.access_token? resolve(r): reject(r);
       tokenClient.requestAccessToken({ prompt, hint: cfg.LOGIN_HINT || '' });
     }catch(e){ reject(e);}
   });
 }
-async function signOut(){
-  try{
-    const tk = window.gapi?.client?.getToken?.();
-    if (tk?.access_token && window.google?.accounts?.oauth2){
-      window.google.accounts.oauth2.revoke(tk.access_token, ()=>{});
-      window.gapi.client.setToken(null);
-      state.oauth = null; saveState();
-    }
-  }catch(e){ console.warn('signOut', e); }
-}
+
 async function trySilentSignIn(){
   try{
     if (!window.gapi?.client) await initGapi();
-    if (!tokenClient) initGIS();
+    if (!tokenClient) await initGIS();
     return await signIn('');
   }catch{ return null; }
 }
 
-async function updateGmailStatusUI(){
-  const text = $("#gmail-status-text");
-  const dot = document.querySelector(".gmail-status .dot");
-  const last = $("#gmailLastSync");  // AGGIUNTO
-  const connected = gmailService.isConnected();
-  if (text) text.textContent = connected ? "Gmail connesso" : "Gmail non connesso";
-  if (dot) dot.style.backgroundColor = connected ? "#10b981" : "#94a3b8";
-  if ($('#quickStats')) $('#quickStats').textContent = connected ? 'Sincronizzazione attiva. Sto monitorando gli allarmi…' : 'Accedi a Gmail per sincronizzare gli allarmi.';
-  
-  // AGGIUNTO: Mostra ultimo aggiornamento
-  if (last) {
-    last.textContent = state.gmailLastSync
-      ? `Ultimo aggiornamento: ${fmtDate(new Date(state.gmailLastSync))}`
-      : '';
-  }
-}
-
-function startGmailPolling(){
-  stopGmailPolling();
-  gmailTick();
-  gmailPollHandle = setInterval(gmailTick, cfg.GMAIL_POLL_MS || DEFAULTS.GMAIL_POLL_MS);
-}
-function stopGmailPolling(){ if (gmailPollHandle){ clearInterval(gmailPollHandle); gmailPollHandle = null; } }
 async function gmailTick(){
   const sp = $('#gmailSpinner'); if (sp) sp.style.display='inline-block';
   try{
     await ensureToken();
     if (gmailService.isConnected()) {
       await gmailService.fetchEmails();
-      state.gmailLastSync = Date.now();  // AGGIUNTO
-      saveState();  // AGGIUNTO
+      state.gmailLastSync = Date.now();
+      saveState();
     }
-    await updateGmailStatusUI();
+    updateGmailStatusUI();
   }catch(e){
     // Se semplicemente non siamo loggati, non mostrare "errore"
     if (gmailService.isConnected()){
@@ -1276,7 +1239,7 @@ function setActiveTab(hash){
   });
 }
 function go(route){
-  routes.foreach(r=> $('#route-'+r)?.classList.toggle('hidden', r!==route));
+  routes.forEach(r => $('#route-'+r)?.classList.toggle('hidden', r!==route));
   $('#pageTitle') && ($('#pageTitle').textContent = route.charAt(0).toUpperCase()+route.slice(1));
   setActiveTab('#'+route);
   if(route==='storico') renderStorico();
