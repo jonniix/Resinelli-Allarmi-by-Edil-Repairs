@@ -470,7 +470,7 @@ const DEFAULTS = {
   LOGO_URL: "",
   ICON_URL: "",
   DEV_LOGO_URL: "",
-  GMAIL_POLL_MS: 15000
+  GMAIL_POLL_MS: 15000  // CAMBIATO DA 60000 A 15000
 };
 
 const DEFAULT_FILIALI = [
@@ -506,9 +506,11 @@ function downloadFile(filename, content, mime='text/plain'){
 function setStatus(msg){ const elBox=$('#statusBox'); if(elBox) elBox.textContent = msg || ""; }
 function showError(msg){ const elBox=$('#errorBox'); if(elBox) elBox.textContent = msg || ""; }
 
-/* Normalizzazione nomi filiale (accenti, spazi, minuscole) */
-function stripAccents(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-function normName(s){ return stripAccents((s||'').toLowerCase().replace(/\s+/g,' ').trim()); }
+/* ===================== HELPER MAPPING FILIALE ROBUSTO ===================== */
+function stripAccents(s){ return s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normName(s){
+  return stripAccents((s||'').toLowerCase().replace(/\s+/g,' ').trim());
+}
 function findFilialeIdFromText(nameHint, fullLowText){
   const text = normName(fullLowText||'');
   const byExact = (state.filiali||[]).find(f => normName(f.name) === normName(nameHint||''));
@@ -533,7 +535,7 @@ function loadState(){
       state.version = s.version || APP_VERSION;
       state.filialeNames = s.filialeNames || Object.fromEntries((state.filiali||[]).map(f => [f.id, f.name]));
       state.oauth = s.oauth || null;
-      state.gmailLastSync = s.gmailLastSync || null;
+      state.gmailLastSync = s.gmailLastSync || null;  // AGGIUNTO
       cfg = { ...DEFAULTS, ...(s.cfg||{}) };
     } else {
       state.filiali = JSON.parse(JSON.stringify(DEFAULT_FILIALI));
@@ -658,11 +660,13 @@ async function trySilentSignIn(){
 async function updateGmailStatusUI(){
   const text = $("#gmail-status-text");
   const dot = document.querySelector(".gmail-status .dot");
-  const last = $("#gmailLastSync");
+  const last = $("#gmailLastSync");  // AGGIUNTO
   const connected = gmailService.isConnected();
   if (text) text.textContent = connected ? "Gmail connesso" : "Gmail non connesso";
   if (dot) dot.style.backgroundColor = connected ? "#10b981" : "#94a3b8";
   if ($('#quickStats')) $('#quickStats').textContent = connected ? 'Sincronizzazione attiva. Sto monitorando gli allarmi…' : 'Accedi a Gmail per sincronizzare gli allarmi.';
+  
+  // AGGIUNTO: Mostra ultimo aggiornamento
   if (last) {
     last.textContent = state.gmailLastSync
       ? `Ultimo aggiornamento: ${fmtDate(new Date(state.gmailLastSync))}`
@@ -682,8 +686,8 @@ async function gmailTick(){
     await ensureToken();
     if (gmailService.isConnected()) {
       await gmailService.fetchEmails();
-      state.gmailLastSync = Date.now();
-      saveState();
+      state.gmailLastSync = Date.now();  // AGGIUNTO
+      saveState();  // AGGIUNTO
     }
     await updateGmailStatusUI();
   }catch(e){
@@ -776,7 +780,9 @@ async function fetchAlarms(){
     if(!status) continue;
 
     const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
+    const low = (subject+'\n'+body).toLowerCase();
 
+    // MODIFICATO: mapping filiale robusto
     const fid = (function(){
       const m = findFilialeIdFromText(filialeName, subject + '\n' + body);
       if (m) return m;
@@ -1300,11 +1306,14 @@ function openRowModal(fid, r){
   });
   modal.classList.add('show');
 }
+
+// MODIFICATO: Storico che itera su state.filiali
 function renderStorico(){
   const wrap = $('#storicoWrap'); if (!wrap) return;
   wrap.innerHTML='';
   const range = currentRange;
 
+  // MODIFICATO: usa state.filiali come sorgente di verità
   const groups = (state.filiali || []).map(f => {
     const fid = f.id;
     const rowsAll = filterRowsByRange(state.history[fid] || [], range);
@@ -1352,8 +1361,10 @@ function renderStorico(){
     wrap.appendChild(table);
   });
 }
+
+// MODIFICATO: Bugfix parentesi in exportCsv
 function exportCsv(){
-  const rowsOut = [['filiale','data','stato','cella','oggetto','temperatura']];
+  const rowsOut = [['filiale','data','stato','cella','oggetto','temperatura']];  // RIMOSSA PARENTESI EXTRA
   for(const fid of Object.keys(state.history||{})){
     const filObj = (state.filiali||[]).find(x=>x.id===fid);
     const filName = filObj?.name || state.filialeNames[fid] || (state.history[fid]?.[0]?.displayName) || fid;
@@ -1364,6 +1375,7 @@ function exportCsv(){
   const csv = rowsOut.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   downloadFile('storico.csv', csv, 'text/csv;charset=utf-8;');
 }
+
 function printPage(){
   const elDate = $('#printDate'); if (elDate) elDate.textContent = fmtDate(new Date());
   window.print();
@@ -1445,50 +1457,34 @@ function renderImpostazioni(){
 </div>`);
 
     card.querySelector('[data-k="streamProvider"]')?.addEventListener('change', (e)=>{
-        const v = e.target.value;
-    card.querySelector('[data-group="jitsi"]').style.display = v === 'jitsi' ? '' : 'none';
-    card.querySelector('[data-group="vdo"]').style.display   = v === 'vdo'   ? '' : 'none';
-    card.querySelector('[data-group="whep"]').style.display  = v === 'whep'  ? '' : 'none';
-  });
-
-  // Salva card (filiale)
-  card.querySelector('[data-act="save"]')?.addEventListener('click', ()=>{
-    card.querySelectorAll('[data-k]').forEach(inp=>{
-      const k = inp.dataset.k;
-      if (inp.type === 'checkbox') f[k] = inp.checked;
-      else f[k] = inp.value;
+      const v = e.target.value;
+      card.querySelector('[data-group="jitsi"]').style.display = v==='jitsi' ? '' : 'none';
+      card.querySelector('[data-group="vdo"]').style.display   = v==='vdo'   ? '' : 'none';
+      card.querySelector('[data-group="whep"]').style.display  = v==='whep'  ? '' : 'none';
     });
-    // aggiorna mapping del nome per storico/UI
-    state.filialeNames[f.id] = f.name;
-    saveState();
-    populateFilialeSelect();
-    refreshUIAfterData();
-    alert('Salvato.');
+    card.querySelector('[data-act="save"]')?.addEventListener('click', ()=>{
+      card.querySelectorAll('[data-k]').forEach(inp=>{
+        const k = inp.dataset.k;
+        if (inp.type==='checkbox') f[k] = inp.checked;
+        else f[k] = inp.value;
+      });
+      state.filialeNames[f.id] = f.name; // aggiorna mapping
+      saveState(); populateFilialeSelect(); refreshUIAfterData();
+      alert('Salvato.');
+    });
+    card.querySelector('[data-act="del"]')?.addEventListener('click', ()=>{
+      if(!confirm('Eliminare la filiale?')) return;
+      state.history[f.id] = [];
+      delete state.filialeNames[f.id];
+      state.filiali = (state.filiali||[]).filter(x=>x.id!==f.id);
+      saveState(); renderImpostazioni(); populateFilialeSelect(); refreshUIAfterData();
+    });
+    card.querySelector('[data-act="open"]')?.addEventListener('click', ()=>{
+      const sel = $('#filialeSelect'); if (sel){ sel.value = f.id; startLiveForCurrent(); go('home'); }
+    });
+    card.querySelector('[data-act="provider"]')?.addEventListener('click', ()=> openOnProvider(f));
+    list.appendChild(card);
   });
-
-  // Elimina filiale
-  card.querySelector('[data-act="del"]')?.addEventListener('click', ()=>{
-    if (!confirm('Eliminare la filiale?')) return;
-    state.history[f.id] = [];
-    delete state.filialeNames[f.id];
-    state.filiali = (state.filiali || []).filter(x => x.id !== f.id);
-    saveState();
-    renderImpostazioni();
-    populateFilialeSelect();
-    refreshUIAfterData();
-  });
-
-  // Apri live su Home
-  card.querySelector('[data-act="open"]')?.addEventListener('click', ()=>{
-    const sel = $('#filialeSelect');
-    if (sel){ sel.value = f.id; startLiveForCurrent(); go('home'); }
-  });
-
-  // Apri direttamente sul provider (Jitsi/VDO/WHEP URL)
-  card.querySelector('[data-act="provider"]')?.addEventListener('click', ()=> openOnProvider(f));
-
-  list.appendChild(card);
-});
 }
 
 /* ===================== BRANDING ===================== */
@@ -1499,12 +1495,11 @@ function applyBranding(){
     if (logoImg){ logoImg.src = cfg.LOGO_URL; logoImg.classList.remove('hidden'); }
     logoBox?.classList.remove('brand-grad');
   } else {
-    logoImg?.classList.add('hidden'); logoImg?.removeAttribute?.('src');
-    logoBox?.classList.add('brand-grad');
+    logoImg?.classList.add('hidden'); logoImg?.removeAttribute?.('src'); logoBox?.classList.add('brand-grad');
   }
   const fav = $('#dynamic-favicon'); if (fav && cfg.ICON_URL){ fav.href = cfg.ICON_URL; }
   const sidebarSiteLogo = $('#sidebarSiteLogo'); if (sidebarSiteLogo) sidebarSiteLogo.src = cfg.LOGO_URL || '';
-  const sidebarDevLogo  = $('#sidebarDevLogo');  if (sidebarDevLogo)  sidebarDevLogo.src  = cfg.DEV_LOGO_URL || '';
+  const sidebarDevLogo = $('#sidebarDevLogo'); if (sidebarDevLogo) sidebarDevLogo.src = cfg.DEV_LOGO_URL || '';
 }
 
 /* ===================== GLOBAL REFRESH ===================== */
@@ -1513,13 +1508,10 @@ function refreshUIAfterData(){
   runCheckFiliali();
   uiRenderFilialiDesc();
   renderHomeStats24h();
-  if (location.hash === '#storico') renderStorico();
+  if(location.hash==='#storico') renderStorico();
   const totalEvents = Object.values(state.history||{}).reduce((acc, arr)=> acc + (arr?.length||0), 0);
   if ($('#quickStats') && totalEvents) $('#quickStats').textContent = `Eventi totali: ${totalEvents}`;
 }
-
-/* Stub per aprire Advanced anche se chiamato prima del bind reale */
-function openAdvancedModal(){ if (window.openAdvancedModal) window.openAdvancedModal(); }
 
 /* ===================== BOOT ORDINATO ===================== */
 window.addEventListener('DOMContentLoaded', async ()=>{
@@ -1541,84 +1533,67 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   $('#btnReconnect')?.addEventListener('click', ()=> startLiveForCurrent());
   $('#btnOpenProvider')?.addEventListener('click', ()=>{
     const f = (state.filiali||[]).find(x=>x.id === $('#filialeSelect')?.value);
-    if (!f) return; openOnProvider(f);
+    if(!f) return; openOnProvider(f);
   });
   $('#btnCopySid')?.addEventListener('click', ()=>{
     const f=(state.filiali||[]).find(x=>x.id===$('#filialeSelect')?.value); if(!f) return;
-    const id = (f.streamProvider==='jitsi') ? f.jitsiRoom : (f.streamProvider==='vdo' ? f.vdoViewId : f.streamUser);
-    copyTxt(id || '');
+    const id = (f.streamProvider==='jitsi')?f.jitsiRoom:(f.streamProvider==='vdo'?f.vdoViewId:f.streamUser); copyTxt(id||'');
   });
   $('#btnCopyPwd')?.addEventListener('click', ()=>{
     const f=(state.filiali||[]).find(x=>x.id===$('#filialeSelect')?.value); if(!f) return;
-    const pw = (f.streamProvider==='jitsi') ? f.jitsiPass : (f.streamProvider==='vdo' ? f.vdoPassword : f.streamPass);
-    copyTxt(pw || '');
+    const pw = (f.streamProvider==='jitsi')?f.jitsiPass:(f.streamProvider==='vdo'?f.vdoPassword:f.streamPass); copyTxt(pw||'');
   });
 
   // Profilo & Branding
-  $('#usernameInput')?.addEventListener('change', (e)=>{ state.username = e.target.value; saveState(); });
-  $('#btnSaveBranding')?.addEventListener('click', ()=>{
-    cfg.LOGO_URL     = $('#logoUrlInput')?.value.trim()    || '';
-    cfg.ICON_URL     = $('#iconUrlInput')?.value.trim()    || '';
-    cfg.DEV_LOGO_URL = $('#devLogoUrlInput')?.value.trim() || '';
-    saveState(); applyBranding(); alert('Loghi salvati.');
-  });
+  $('#usernameInput')?.addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
+  $('#btnSaveBranding')?.addEventListener('click', ()=>{ cfg.LOGO_URL=$('#logoUrlInput')?.value.trim()||''; cfg.ICON_URL=$('#iconUrlInput')?.value.trim()||''; cfg.DEV_LOGO_URL=$('#devLogoUrlInput')?.value.trim()||''; saveState(); applyBranding(); alert('Loghi salvati.'); });
 
   // Aggiungi filiale
   $('#btnAddFiliale')?.addEventListener('click', ()=>{
     const idNew = (crypto?.randomUUID?.() || ('f'+Date.now()));
-    const nf = { id: idNew, name: 'Nuova filiale', email: 'allarmi@edilrepairs.ch',
-      streamProvider: 'jitsi', jitsiDomain: 'meet.jit.si', jitsiRoom: '', jitsiPass: '',
-      vdoViewId: '', vdoPassword: '', streamUrl: '', streamUser: '', streamPass: '', streamAudio: false
-    };
+    const nf = { id: idNew, name: 'Nuova filiale', email: 'allarmi@edilrepairs.ch', streamProvider: 'jitsi', jitsiDomain: 'meet.jit.si', jitsiRoom: '', jitsiPass: '', vdoViewId: '', vdoPassword: '', streamUrl: '', streamUser: '', streamPass: '', streamAudio: false };
     state.filiali.push(nf);
     state.filialeNames[idNew] = nf.name;
     saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
-  // Advanced modal (bind reale)
-  function _openAdvancedModal() {
+  // Advanced modal
+  function openAdvancedModal() {
     const modal = $('#advModal'); const gate = $('#advGate'); const body = $('#advBody');
     if (!modal || !gate || !body) return;
     modal.classList.add('show'); gate.classList.remove('hidden'); body.classList.add('hidden');
     const host = location.host; $('#originsHint') && ($('#originsHint').textContent = `https://${host}`);
-    $('#advClientId')  && ($('#advClientId').value  = cfg?.CLIENT_ID || '');
-    $('#advApiKey')    && ($('#advApiKey').value    = cfg?.API_KEY || '');
-    $('#advGmailQuery')&& ($('#advGmailQuery').value= cfg?.GMAIL_QUERY || '');
-    $('#advTempRx')    && ($('#advTempRx').value    = cfg?.TEMP_RX || '');
+    $('#advClientId') && ($('#advClientId').value = cfg?.CLIENT_ID || '');
+    $('#advApiKey') && ($('#advApiKey').value = cfg?.API_KEY || '');
+    $('#advGmailQuery') && ($('#advGmailQuery').value = cfg?.GMAIL_QUERY || '');
+    $('#advTempRx') && ($('#advTempRx').value = cfg?.TEMP_RX || '');
     $('#advLoginHint') && ($('#advLoginHint').value = cfg?.LOGIN_HINT || '');
-    $('#advScopes')    && ($('#advScopes').value    = cfg?.SCOPES || DEFAULTS.SCOPES || '');
+    $('#advScopes') && ($('#advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '');
     setTimeout(()=>{ $('#advPwd')?.focus(); }, 100);
   }
-  window.openAdvancedModal = _openAdvancedModal;
-  $('#btnAdvanced')?.addEventListener('click', ()=> _openAdvancedModal());
-  $('#advClose')  && ($('#advClose').onclick  = ()=> $('#advModal')?.classList.remove('show'));
-  $('#advUnlock') && ($('#advUnlock').onclick = ()=>{
-    if ($('#advPwd')?.value === '979851'){
-      $('#advGate')?.classList.add('hidden'); $('#advBody')?.classList.remove('hidden');
-      setTimeout(()=> $('#advClientId')?.focus(), 100);
-    } else { alert('Password errata'); }
-  });
+  window.openAdvancedModal = openAdvancedModal;
+  $('#btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
+  $('#advClose') && ($('#advClose').onclick = ()=> $('#advModal')?.classList.remove('show'));
+  $('#advUnlock') && ($('#advUnlock').onclick = ()=>{ if($('#advPwd')?.value==='979851'){ $('#advGate')?.classList.add('hidden'); $('#advBody')?.classList.remove('hidden'); setTimeout(()=>$('#advClientId')?.focus(),100); } else { alert('Password errata'); } });
   $('#advSave') && ($('#advSave').onclick = ()=>{
-    cfg.CLIENT_ID   = $('#advClientId')?.value.trim()   || '';
-    cfg.API_KEY     = $('#advApiKey')?.value.trim()     || '';
-    cfg.GMAIL_QUERY = $('#advGmailQuery')?.value.trim() || '';
-    cfg.TEMP_RX     = $('#advTempRx')?.value.trim()     || '';
-    cfg.LOGIN_HINT  = $('#advLoginHint')?.value.trim()  || '';
-    cfg.SCOPES      = $('#advScopes')?.value.trim()     || DEFAULTS.SCOPES;
+    cfg.CLIENT_ID  = $('#advClientId')?.value.trim() || '';
+    cfg.API_KEY    = $('#advApiKey')?.value.trim() || '';
+    cfg.GMAIL_QUERY= $('#advGmailQuery')?.value.trim() || '';
+    cfg.TEMP_RX    = $('#advTempRx')?.value.trim() || '';
+    cfg.LOGIN_HINT = $('#advLoginHint')?.value.trim() || '';
+    cfg.SCOPES     = $('#advScopes')?.value.trim() || DEFAULTS.SCOPES;
     saveState();
     (async ()=>{
-      try { await initGapi(); try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }
-      catch(e){ alert('Errore init: ' + (e?.message || e)); }
+      try{ await initGapi(); try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }catch(e){ alert('Errore init: ' + (e?.message || e)); }
     })();
     $('#advModal')?.classList.remove('show');
   });
   $('#advTest') && ($('#advTest').onclick = async ()=>{
-    try{ await signOut(); await signIn('consent'); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); }
-    catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
+    try{ await signOut(); await signIn('consent'); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
   });
   $('#advReset') && ($('#advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); });
 
-  // Report globale
+  // Report global
   $('#btnReportGlobal')?.addEventListener('click', ()=> openAIReport(null, null));
   // Chiudi report
   $('#aiReportClose') && ($('#aiReportClose').onclick = ()=> $('#aiReportModal')?.classList.remove('show'));
@@ -1638,8 +1613,8 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   // Aggiorna manuale (sidebar)
   $('#btnRefresh')?.addEventListener('click', gmailTick);
 
-  /* Boot order:
-     initGapi() → initGIS() → ensureToken → fetchAlarms() → startLiveForCurrent() → startGmailPolling()
+  /* Boot order garantito:
+     initGapi() → initGIS() → silent sign-in/restore → fetchAlarms() → startLiveForCurrent() → startGmailPolling()
   */
   try { await initGapi(); } catch (e) { console.warn('initGapi fallita', e); }
   try { initGIS(); } catch (e) { console.warn('initGIS fallita', e); }
@@ -1652,11 +1627,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   }catch(e){ /* ignora */ }
 
   try{
-    if (gmailService.isConnected()) {
-      await fetchAlarms();
-      state.gmailLastSync = Date.now();
-      saveState();
-    }
+    if (gmailService.isConnected()) { await fetchAlarms(); }
   } catch(e){ console.warn('fetchAlarms iniziale fallita', e); }
 
   try { await startLiveForCurrent(); } catch (e) { console.warn('startLiveForCurrent fallita', e); }
@@ -1664,21 +1635,21 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   startTokenAutoRefresh();
   updateGmailStatusUI();
 
-  // Signin/change account (forza account chooser)
+  // Signin/change account
   async function forceAccountChooser(){
     try{
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { _openAdvancedModal(); return; }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
       if (!window.gapi?.client) { await initGapi(); }
       if (!tokenClient) { initGIS(); }
       await signOut(); await new Promise(r=>setTimeout(r,50));
       const r = await signIn('consent');
-      if (r?.access_token) { await fetchAlarms(); state.gmailLastSync = Date.now(); saveState(); updateGmailStatusUI(); }
+      if (r?.access_token) await fetchAlarms();
     }catch(e){ alert('Errore login: ' + (e?.message || e)); }
   }
-  $('#btnSignIn')       && ($('#btnSignIn').onclick       = forceAccountChooser);
-  $('#btnChangeAccount')&& ($('#btnChangeAccount').onclick = forceAccountChooser);
+  $('#btnSignIn') && ($('#btnSignIn').onclick = forceAccountChooser);
+  $('#btnChangeAccount') && ($('#btnChangeAccount').onclick = forceAccountChooser);
 
-  // Modal riga: chiusura con click sull’overlay
+  // Modal riga: chiudi clic overlay
   $('#rowModal')?.addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
 
   // Cleanup
