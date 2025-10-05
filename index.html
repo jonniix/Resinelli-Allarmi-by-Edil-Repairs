@@ -1015,6 +1015,76 @@ async function fetchAlarms(){
   refreshUIAfterData();
 }
 
+/* ===================== DEVICE FLOW ===================== */
+/* ======= Device Flow (fallback solo-frontend per PWA iOS) ======= */
+let deviceFlow = { interval: 5000, expiresAt: 0, device_code: "" };
+
+function openDeviceModal(code, url){
+  const m = document.querySelector('#deviceModal'), b = document.querySelector('#deviceBody');
+  if (!m || !b) { alert(`Vai su ${url} e inserisci il codice: ${code}`); return; }
+  b.innerHTML = `
+    <div>1) Apri <a class="text-blue-600 underline" href="${url}" target="_blank" rel="noopener">google.com/device</a></div>
+    <div>2) Inserisci questo codice:</div>
+    <div class="text-2xl font-mono tracking-widest p-2 border rounded-lg select-all">${code}</div>
+    <div class="text-xs opacity-70">Lascia questa finestra aperta: l’accesso si completerà automaticamente.</div>
+  `;
+  m.classList.add('show');
+}
+function closeDeviceModal(){ document.querySelector('#deviceModal')?.classList.remove('show'); }
+document.getElementById('deviceClose')?.addEventListener('click', closeDeviceModal);
+
+async function startDeviceFlow(){
+  const client_id = (cfg.DEVICE_FLOW_CLIENT_ID || "").trim();
+  if (!client_id){ alert('Imposta il DEVICE_FLOW_CLIENT_ID nelle Impostazioni avanzate.'); return; }
+
+  const resp = await fetch('https://oauth2.googleapis.com/device/code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id, scope: cfg.SCOPES })
+  }).then(r=>r.json()).catch(e=>({ error: String(e) }));
+
+  if (!resp || resp.error){ alert('Device flow non disponibile: ' + (resp?.error || 'errore')); return; }
+
+  deviceFlow = {
+    interval: (resp.interval || 5) * 1000,
+    expiresAt: Date.now() + (resp.expires_in || 1800) * 1000,
+    device_code: resp.device_code
+  };
+
+  openDeviceModal(resp.user_code, resp.verification_url || 'https://www.google.com/device');
+  pollDeviceToken().catch(()=>{ closeDeviceModal(); });
+}
+
+async function pollDeviceToken(){
+  const client_id = (cfg.DEVICE_FLOW_CLIENT_ID || "").trim();
+  while (Date.now() < deviceFlow.expiresAt){
+    const tok = await fetch('https://oauth2.googleapis.com/token', {
+      method:'POST',
+      headers:{ 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id,
+        device_code: deviceFlow.device_code,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
+      })
+    }).then(r=>r.json()).catch(()=>({ error:'network_error' }));
+
+    if (tok?.access_token){
+      try { window.gapi?.client?.setToken?.({ access_token: tok.access_token }); } catch {}
+      // Non persistere: nessun saveState() qui
+      state.oauth = { access_token: tok.access_token, expires_at: Date.now() + ((tok.expires_in || 3600) - 60) * 1000 };
+      updateGmailStatusUI();
+      closeDeviceModal();
+      try { await fetchAlarms(); } catch(_) {}
+      return;
+    }
+    if (tok?.error === 'authorization_pending'){ await new Promise(r=>setTimeout(r, deviceFlow.interval)); continue; }
+    if (tok?.error === 'slow_down'){ deviceFlow.interval += 5000; await new Promise(r=>setTimeout(r, deviceFlow.interval)); continue; }
+    if (tok?.error === 'access_denied' || tok?.error === 'expired_token'){ closeDeviceModal(); return; }
+    closeDeviceModal(); return;
+  }
+  closeDeviceModal();
+}
+
 /* ===================== LIVE ===================== */
 let webrtcSession = null;
 let jitsiApi = null;
@@ -1897,24 +1967,30 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   }
 
   // SOSTITUISCI binding ai bottoni login/account
-  const bindSigninBtn = (btn) => {
-    if (!btn) return;
-    // iOS Safari preferisce touchend; click rimane il fallback universale
-    btn.addEventListener('touchend', openGmailChooserInline, { passive: false });
-    btn.addEventListener('click', openGmailChooserInline);
-  };
-  bindSigninBtn($('#btnSignIn'));
-  bindSigninBtn($('#btnChangeAccount'));
+  function doLogin(ev){
+    ev?.preventDefault?.();
+    // In PWA/standalone su Safari usa il Device Flow
+    if (isStandalone && isSafariAny && (cfg.DEVICE_FLOW_CLIENT_ID || '').trim()){
+      startDeviceFlow();
+      return;
+    }
+    // Altrimenti GIS classico (popup/iframe)
+    openGmailChooserInline(ev);
+  }
 
-  // Modal riga: chiudi clic overlay
-  $('#rowModal')?.addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
+  // Binding unificato
+  ['#btnSignIn', '#btnChangeAccount', '#btnOauthLogin'].forEach(sel=>{
+    const b = document.querySelector(sel);
+    if (!b) return;
+    b.addEventListener('touchend', doLogin, { passive:false });
+    b.addEventListener('click', doLogin);
+  });
+  // Logout in Impostazioni
+  document.querySelector('#btnOauthLogout')?.addEventListener('click', signOut);
 
-  // Cleanup
-  window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); destroyJitsi(); stopGmailPolling(); });
-  window.addEventListener('focus', gmailTick);
+  // ...existing code...
 });
 </script>
-
 <!-- AGGIUNGI sotto i tuoi modali -->
 <!-- Device Login (solo PWA) -->
 <div id="deviceModal" class="overlay" aria-modal="true" role="dialog">
