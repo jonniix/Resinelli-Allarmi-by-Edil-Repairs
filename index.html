@@ -587,6 +587,15 @@ async function waitForGapiLoad(maxMs=10000){
   const t0 = Date.now();
   while (!(window.gapi && window.gapi.load)) { if (Date.now()-t0 > maxMs) throw new Error("gapi non caricato"); await new Promise(r=>setTimeout(r,50)); }
 }
+
+// PATCH: wait for GIS
+async function waitForGISLoad(maxMs=10000){
+  const t0 = Date.now();
+  while (!(window.google?.accounts?.oauth2)) {
+    if (Date.now()-t0 > maxMs) throw new Error("GIS non caricato");
+    await new Promise(r=>setTimeout(r,50));
+  }
+}
 async function initGapi(){
   await waitForGapiLoad();
   return new Promise((resolve, reject)=>{
@@ -1605,6 +1614,14 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   loadState();
   populateFilialeSelect();
 
+  // PATCH: Preload GIS and disable login buttons until ready
+  const b1 = $('#btnSignIn'), b2 = $('#btnChangeAccount');
+  b1?.setAttribute('disabled','');
+  b2?.setAttribute('disabled','');
+  try { await initGapi(); } catch (e) { console.warn('initGapi fallita', e); }
+  try { await waitForGISLoad(); initGIS(); } catch (e) { console.warn('initGIS fallita', e); }
+  b1?.removeAttribute('disabled'); b2?.removeAttribute('disabled');
+
   // Router
   document.querySelectorAll('.tab-btn').forEach(b=> b.addEventListener('click', ()=> go(b.dataset.route.slice(1))));
   const initial = (location.hash || '#home'); setActiveTab(initial); go((initial||'#home').slice(1));
@@ -1702,7 +1719,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
      initGapi() → initGIS() → silent sign-in/restore → fetchAlarms() → startLiveForCurrent() → startGmailPolling()
   */
   try { await initGapi(); } catch (e) { console.warn('initGapi fallita', e); }
-  try { initGIS(); } catch (e) { console.warn('initGIS fallita', e); }
+  try { await waitForGISLoad(); initGIS(); } catch (e) { console.warn('initGIS fallita', e); }
 
   try{
     if (isTokenValid()){
@@ -1720,19 +1737,28 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   startTokenAutoRefresh();
   updateGmailStatusUI();
 
-  // Signin/change account
-  async function forceAccountChooser(){
+  // Signin/change account (PATCH: inline, sync, mobile-safe)
+  function openGmailChooserInline(){
     try{
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
-      if (!window.gapi?.client) { await initGapi(); }
-      if (!tokenClient) { initGIS(); }
-      await signOut(); await new Promise(r=>setTimeout(r,50));
-      const r = await signIn('consent');
-      if (r?.access_token) await fetchAlarms();
-    }catch(e){ alert('Errore login: ' + (e?.message || e)); }
+      if (!tokenClient) initGIS(); // nessun await qui
+      tokenClient.callback = async (resp)=>{
+        if (resp?.access_token){
+          window.gapi?.client?.setToken?.({ access_token: resp.access_token });
+          setAccessTokenFromResp(resp);
+          try { await fetchAlarms(); } catch(_){}
+          updateGmailStatusUI();
+        }
+      };
+      tokenClient.requestAccessToken({
+        prompt: 'select_account',
+        hint: cfg.LOGIN_HINT || ''
+      });
+    }catch(e){
+      alert('Login non disponibile: ' + (e?.message || e));
+    }
   }
-  $('#btnSignIn') && ($('#btnSignIn').onclick = forceAccountChooser);
-  $('#btnChangeAccount') && ($('#btnChangeAccount').onclick = forceAccountChooser);
+  $('#btnSignIn')?.addEventListener('click', openGmailChooserInline, {passive:true});
+  $('#btnChangeAccount')?.addEventListener('click', openGmailChooserInline, {passive:true});
 
   // Modal riga: chiudi clic overlay
   $('#rowModal')?.addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
