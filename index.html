@@ -161,6 +161,7 @@
             <span class="dot inline-block w-2.5 h-2.5 rounded-full bg-slate-400" aria-hidden="true"></span>
             <span id="gmail-status-text" aria-live="polite">Gmail</span>
             <span class="spinner" role="status" aria-live="polite" aria-label="Caricamento Gmail" id="gmailSpinner" style="display:none"></span>
+            <!-- NEW: ultimo aggiornamento -->
             <span id="gmailLastSync" class="ml-2 text-xs opacity-60"></span>
             <button id="btnRefresh" class="btn text-xs ml-auto" aria-label="Rileggi Gmail">Aggiorna</button>
           </div>
@@ -478,7 +479,7 @@ const DEFAULT_FILIALI = [
   { id:'losone', name:'Resinelli Losone', email:'allarmi@edilrepairs.ch', streamProvider:'jitsi', jitsiDomain:'meet.jit.si', jitsiRoom:'Resinelli-losone', jitsiPass:'', streamUrl:'', streamUser:'', streamPass:'', streamAudio:false, vdoViewId:'', vdoPassword:'' }
 ];
 
-/* Stato: aggiunti filialeNames + oauth (token persistito) */
+/* Stato: aggiunti filialeNames + oauth (token persistito) + gmailLastSync */
 let state = { username: '', filiali: [], history: {}, version: APP_VERSION, filialeNames: {}, oauth: null, gmailLastSync: null };
 let cfg = { ...DEFAULTS };
 let tokenClient = null;
@@ -505,6 +506,20 @@ function downloadFile(filename, content, mime='text/plain'){
 function setStatus(msg){ const elBox=$('#statusBox'); if(elBox) elBox.textContent = msg || ""; }
 function showError(msg){ const elBox=$('#errorBox'); if(elBox) elBox.textContent = msg || ""; }
 
+/* Normalizzazione nomi filiale (accenti, spazi, minuscole) */
+function stripAccents(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normName(s){ return stripAccents((s||'').toLowerCase().replace(/\s+/g,' ').trim()); }
+function findFilialeIdFromText(nameHint, fullLowText){
+  const text = normName(fullLowText||'');
+  const byExact = (state.filiali||[]).find(f => normName(f.name) === normName(nameHint||''));
+  if (byExact) return byExact.id;
+  const byStart = (state.filiali||[]).find(f => normName(f.name).startsWith(normName(nameHint||'')));
+  if (byStart) return byStart.id;
+  const byInclude = (state.filiali||[]).find(f => text.includes(normName(f.name)));
+  if (byInclude) return byInclude.id;
+  return null;
+}
+
 /* ===================== STORAGE ===================== */
 function migrateIfNeeded(s){ return s; }
 function loadState(){
@@ -518,6 +533,7 @@ function loadState(){
       state.version = s.version || APP_VERSION;
       state.filialeNames = s.filialeNames || Object.fromEntries((state.filiali||[]).map(f => [f.id, f.name]));
       state.oauth = s.oauth || null;
+      state.gmailLastSync = s.gmailLastSync || null;
       cfg = { ...DEFAULTS, ...(s.cfg||{}) };
     } else {
       state.filiali = JSON.parse(JSON.stringify(DEFAULT_FILIALI));
@@ -760,7 +776,6 @@ async function fetchAlarms(){
     if(!status) continue;
 
     const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
-    const low = (subject+'\n'+body).toLowerCase();
 
     const fid = (function(){
       const m = findFilialeIdFromText(filialeName, subject + '\n' + body);
@@ -768,6 +783,7 @@ async function fetchAlarms(){
       return $('#filialeSelect')?.value || state.filiali[0]?.id;
     })();
 
+    // AGGIORNA mapping se dal subject arriva un nome
     if (filialeName) state.filialeNames[fid] = filialeName;
 
     const displayName =
@@ -1366,52 +1382,52 @@ function renderImpostazioni(){
     const card = el(`<div class="glass rounded-xl p-3">
   <div class="grid md:grid-cols-12 gap-3 items-start">
     <label class="block text-sm md:col-span-3">Nome
-      <input data-k="name" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.name}" />
+      <input data-k="name" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.name}" />
     </label>
     <label class="block text-sm md:col-span-3">Email storico
-      <input data-k="email" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.email}" />
+      <input data-k="email" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.email}" />
     </label>
     <label class="block text-sm md:col-span-2">Provider
       <select data-k="streamProvider" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200">
-        <option value="jitsi" \${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
-        <option value="vdo" \${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
-        <option value="whep" \${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
+        <option value="jitsi" ${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
+        <option value="vdo" ${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
+        <option value="whep" ${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
       </select>
     </label>
 
-    <div data-group="jitsi" class="md:col-span-4" style="\${f.streamProvider==='jitsi'?'':'display:none'}">
+    <div data-group="jitsi" class="md:col-span-4" style="${f.streamProvider==='jitsi'?'':'display:none'}">
       <label class="block text-sm">Jitsi domain
-        <input data-k="jitsiDomain" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.jitsiDomain||'meet.jit.si'}" />
+        <input data-k="jitsiDomain" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.jitsiDomain||'meet.jit.si'}" />
       </label>
       <label class="block text-sm">Room
-        <input data-k="jitsiRoom" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.jitsiRoom||''}" />
+        <input data-k="jitsiRoom" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.jitsiRoom||''}" />
       </label>
       <label class="block text-sm">Password (visibile)
-        <input data-k="jitsiPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.jitsiPass||''}" />
+        <input data-k="jitsiPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.jitsiPass||''}" />
       </label>
     </div>
 
-    <div data-group="vdo" class="md:col-span-3" style="\${f.streamProvider==='vdo'?'':'display:none'}">
+    <div data-group="vdo" class="md:col-span-3" style="${f.streamProvider==='vdo'?'':'display:none'}">
       <label class="block text-sm">VDO View ID
-        <input data-k="vdoViewId" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.vdoViewId||''}" />
+        <input data-k="vdoViewId" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.vdoViewId||''}" />
       </label>
       <label class="block text-sm">VDO Password
-        <input data-k="vdoPassword" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.vdoPassword||''}" />
+        <input data-k="vdoPassword" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.vdoPassword||''}" />
       </label>
     </div>
 
-    <div data-group="whep" class="md:col-span-4" style="\${f.streamProvider==='whep'?'':'display:none'}">
+    <div data-group="whep" class="md:col-span-4" style="${f.streamProvider==='whep'?'':'display:none'}">
       <label class="block text-sm">URL WHEP (HTTPS)
-        <input data-k="streamUrl" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.streamUrl||''}" />
+        <input data-k="streamUrl" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.streamUrl||''}" />
       </label>
       <label class="block text-sm">ID
-        <input data-k="streamUser" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.streamUser||''}" />
+        <input data-k="streamUser" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.streamUser||''}" />
       </label>
       <label class="block text-sm">Password
-        <input data-k="streamPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.streamPass||''}" />
+        <input data-k="streamPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.streamPass||''}" />
       </label>
       <label class="flex items-center gap-2 text-sm mt-2">
-        <input type="checkbox" data-k="streamAudio" \${f.streamAudio?'checked':''} class="accent-emerald-500"> Audio (se supportato)
+        <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500"> Audio (se supportato)
       </label>
     </div>
 
@@ -1429,34 +1445,50 @@ function renderImpostazioni(){
 </div>`);
 
     card.querySelector('[data-k="streamProvider"]')?.addEventListener('change', (e)=>{
-      const v = e.target.value;
-      card.querySelector('[data-group="jitsi"]').style.display = v==='jitsi' ? '' : 'none';
-      card.querySelector('[data-group="vdo"]').style.display   = v==='vdo'   ? '' : 'none';
-      card.querySelector('[data-group="whep"]').style.display  = v==='whep'  ? '' : 'none';
-    });
-    card.querySelector('[data-act="save"]')?.addEventListener('click', ()=>{
-      card.querySelectorAll('[data-k]').forEach(inp=>{
-        const k = inp.dataset.k;
-        if (inp.type==='checkbox') f[k] = inp.checked;
-        else f[k] = inp.value;
-      });
-      state.filialeNames[f.id] = f.name; // aggiorna mapping
-      saveState(); populateFilialeSelect(); refreshUIAfterData();
-      alert('Salvato.');
-    });
-    card.querySelector('[data-act="del"]')?.addEventListener('click', ()=>{
-      if(!confirm('Eliminare la filiale?')) return;
-      state.history[f.id] = [];
-      delete state.filialeNames[f.id];
-      state.filiali = (state.filiali||[]).filter(x=>x.id!==f.id);
-      saveState(); renderImpostazioni(); populateFilialeSelect(); refreshUIAfterData();
-    });
-    card.querySelector('[data-act="open"]')?.addEventListener('click', ()=>{
-      const sel = $('#filialeSelect'); if (sel){ sel.value = f.id; startLiveForCurrent(); go('home'); }
-    });
-    card.querySelector('[data-act="provider"]')?.addEventListener('click', ()=> openOnProvider(f));
-    list.appendChild(card);
+        const v = e.target.value;
+    card.querySelector('[data-group="jitsi"]').style.display = v === 'jitsi' ? '' : 'none';
+    card.querySelector('[data-group="vdo"]').style.display   = v === 'vdo'   ? '' : 'none';
+    card.querySelector('[data-group="whep"]').style.display  = v === 'whep'  ? '' : 'none';
   });
+
+  // Salva card (filiale)
+  card.querySelector('[data-act="save"]')?.addEventListener('click', ()=>{
+    card.querySelectorAll('[data-k]').forEach(inp=>{
+      const k = inp.dataset.k;
+      if (inp.type === 'checkbox') f[k] = inp.checked;
+      else f[k] = inp.value;
+    });
+    // aggiorna mapping del nome per storico/UI
+    state.filialeNames[f.id] = f.name;
+    saveState();
+    populateFilialeSelect();
+    refreshUIAfterData();
+    alert('Salvato.');
+  });
+
+  // Elimina filiale
+  card.querySelector('[data-act="del"]')?.addEventListener('click', ()=>{
+    if (!confirm('Eliminare la filiale?')) return;
+    state.history[f.id] = [];
+    delete state.filialeNames[f.id];
+    state.filiali = (state.filiali || []).filter(x => x.id !== f.id);
+    saveState();
+    renderImpostazioni();
+    populateFilialeSelect();
+    refreshUIAfterData();
+  });
+
+  // Apri live su Home
+  card.querySelector('[data-act="open"]')?.addEventListener('click', ()=>{
+    const sel = $('#filialeSelect');
+    if (sel){ sel.value = f.id; startLiveForCurrent(); go('home'); }
+  });
+
+  // Apri direttamente sul provider (Jitsi/VDO/WHEP URL)
+  card.querySelector('[data-act="provider"]')?.addEventListener('click', ()=> openOnProvider(f));
+
+  list.appendChild(card);
+});
 }
 
 /* ===================== BRANDING ===================== */
@@ -1467,11 +1499,12 @@ function applyBranding(){
     if (logoImg){ logoImg.src = cfg.LOGO_URL; logoImg.classList.remove('hidden'); }
     logoBox?.classList.remove('brand-grad');
   } else {
-    logoImg?.classList.add('hidden'); logoImg?.removeAttribute?.('src'); logoBox?.classList.add('brand-grad');
+    logoImg?.classList.add('hidden'); logoImg?.removeAttribute?.('src');
+    logoBox?.classList.add('brand-grad');
   }
   const fav = $('#dynamic-favicon'); if (fav && cfg.ICON_URL){ fav.href = cfg.ICON_URL; }
   const sidebarSiteLogo = $('#sidebarSiteLogo'); if (sidebarSiteLogo) sidebarSiteLogo.src = cfg.LOGO_URL || '';
-  const sidebarDevLogo = $('#sidebarDevLogo'); if (sidebarDevLogo) sidebarDevLogo.src = cfg.DEV_LOGO_URL || '';
+  const sidebarDevLogo  = $('#sidebarDevLogo');  if (sidebarDevLogo)  sidebarDevLogo.src  = cfg.DEV_LOGO_URL || '';
 }
 
 /* ===================== GLOBAL REFRESH ===================== */
@@ -1480,10 +1513,13 @@ function refreshUIAfterData(){
   runCheckFiliali();
   uiRenderFilialiDesc();
   renderHomeStats24h();
-  if(location.hash==='#storico') renderStorico();
+  if (location.hash === '#storico') renderStorico();
   const totalEvents = Object.values(state.history||{}).reduce((acc, arr)=> acc + (arr?.length||0), 0);
   if ($('#quickStats') && totalEvents) $('#quickStats').textContent = `Eventi totali: ${totalEvents}`;
 }
+
+/* Stub per aprire Advanced anche se chiamato prima del bind reale */
+function openAdvancedModal(){ if (window.openAdvancedModal) window.openAdvancedModal(); }
 
 /* ===================== BOOT ORDINATO ===================== */
 window.addEventListener('DOMContentLoaded', async ()=>{
@@ -1505,67 +1541,84 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   $('#btnReconnect')?.addEventListener('click', ()=> startLiveForCurrent());
   $('#btnOpenProvider')?.addEventListener('click', ()=>{
     const f = (state.filiali||[]).find(x=>x.id === $('#filialeSelect')?.value);
-    if(!f) return; openOnProvider(f);
+    if (!f) return; openOnProvider(f);
   });
   $('#btnCopySid')?.addEventListener('click', ()=>{
     const f=(state.filiali||[]).find(x=>x.id===$('#filialeSelect')?.value); if(!f) return;
-    const id = (f.streamProvider==='jitsi')?f.jitsiRoom:(f.streamProvider==='vdo'?f.vdoViewId:f.streamUser); copyTxt(id||'');
+    const id = (f.streamProvider==='jitsi') ? f.jitsiRoom : (f.streamProvider==='vdo' ? f.vdoViewId : f.streamUser);
+    copyTxt(id || '');
   });
   $('#btnCopyPwd')?.addEventListener('click', ()=>{
     const f=(state.filiali||[]).find(x=>x.id===$('#filialeSelect')?.value); if(!f) return;
-    const pw = (f.streamProvider==='jitsi')?f.jitsiPass:(f.streamProvider==='vdo'?f.vdoPassword:f.streamPass); copyTxt(pw||'');
+    const pw = (f.streamProvider==='jitsi') ? f.jitsiPass : (f.streamProvider==='vdo' ? f.vdoPassword : f.streamPass);
+    copyTxt(pw || '');
   });
 
   // Profilo & Branding
-  $('#usernameInput')?.addEventListener('change', (e)=>{ state.username=e.target.value; saveState() });
-  $('#btnSaveBranding')?.addEventListener('click', ()=>{ cfg.LOGO_URL=$('#logoUrlInput')?.value.trim()||''; cfg.ICON_URL=$('#iconUrlInput')?.value.trim()||''; cfg.DEV_LOGO_URL=$('#devLogoUrlInput')?.value.trim()||''; saveState(); applyBranding(); alert('Loghi salvati.'); });
+  $('#usernameInput')?.addEventListener('change', (e)=>{ state.username = e.target.value; saveState(); });
+  $('#btnSaveBranding')?.addEventListener('click', ()=>{
+    cfg.LOGO_URL     = $('#logoUrlInput')?.value.trim()    || '';
+    cfg.ICON_URL     = $('#iconUrlInput')?.value.trim()    || '';
+    cfg.DEV_LOGO_URL = $('#devLogoUrlInput')?.value.trim() || '';
+    saveState(); applyBranding(); alert('Loghi salvati.');
+  });
 
   // Aggiungi filiale
   $('#btnAddFiliale')?.addEventListener('click', ()=>{
     const idNew = (crypto?.randomUUID?.() || ('f'+Date.now()));
-    const nf = { id: idNew, name: 'Nuova filiale', email: 'allarmi@edilrepairs.ch', streamProvider: 'jitsi', jitsiDomain: 'meet.jit.si', jitsiRoom: '', jitsiPass: '', vdoViewId: '', vdoPassword: '', streamUrl: '', streamUser: '', streamPass: '', streamAudio: false };
+    const nf = { id: idNew, name: 'Nuova filiale', email: 'allarmi@edilrepairs.ch',
+      streamProvider: 'jitsi', jitsiDomain: 'meet.jit.si', jitsiRoom: '', jitsiPass: '',
+      vdoViewId: '', vdoPassword: '', streamUrl: '', streamUser: '', streamPass: '', streamAudio: false
+    };
     state.filiali.push(nf);
     state.filialeNames[idNew] = nf.name;
     saveState(); renderImpostazioni(); populateFilialeSelect();
   });
 
-  // Advanced modal
-  function openAdvancedModal() {
+  // Advanced modal (bind reale)
+  function _openAdvancedModal() {
     const modal = $('#advModal'); const gate = $('#advGate'); const body = $('#advBody');
     if (!modal || !gate || !body) return;
     modal.classList.add('show'); gate.classList.remove('hidden'); body.classList.add('hidden');
     const host = location.host; $('#originsHint') && ($('#originsHint').textContent = `https://${host}`);
-    $('#advClientId') && ($('#advClientId').value = cfg?.CLIENT_ID || '');
-    $('#advApiKey') && ($('#advApiKey').value = cfg?.API_KEY || '');
-    $('#advGmailQuery') && ($('#advGmailQuery').value = cfg?.GMAIL_QUERY || '');
-    $('#advTempRx') && ($('#advTempRx').value = cfg?.TEMP_RX || '');
+    $('#advClientId')  && ($('#advClientId').value  = cfg?.CLIENT_ID || '');
+    $('#advApiKey')    && ($('#advApiKey').value    = cfg?.API_KEY || '');
+    $('#advGmailQuery')&& ($('#advGmailQuery').value= cfg?.GMAIL_QUERY || '');
+    $('#advTempRx')    && ($('#advTempRx').value    = cfg?.TEMP_RX || '');
     $('#advLoginHint') && ($('#advLoginHint').value = cfg?.LOGIN_HINT || '');
-    $('#advScopes') && ($('#advScopes').value = cfg?.SCOPES || DEFAULTS.SCOPES || '');
+    $('#advScopes')    && ($('#advScopes').value    = cfg?.SCOPES || DEFAULTS.SCOPES || '');
     setTimeout(()=>{ $('#advPwd')?.focus(); }, 100);
   }
-  window.openAdvancedModal = openAdvancedModal;
-  $('#btnAdvanced')?.addEventListener('click', ()=> openAdvancedModal());
-  $('#advClose') && ($('#advClose').onclick = ()=> $('#advModal')?.classList.remove('show'));
-  $('#advUnlock') && ($('#advUnlock').onclick = ()=>{ if($('#advPwd')?.value==='979851'){ $('#advGate')?.classList.add('hidden'); $('#advBody')?.classList.remove('hidden'); setTimeout(()=>$('#advClientId')?.focus(),100); } else { alert('Password errata'); } });
+  window.openAdvancedModal = _openAdvancedModal;
+  $('#btnAdvanced')?.addEventListener('click', ()=> _openAdvancedModal());
+  $('#advClose')  && ($('#advClose').onclick  = ()=> $('#advModal')?.classList.remove('show'));
+  $('#advUnlock') && ($('#advUnlock').onclick = ()=>{
+    if ($('#advPwd')?.value === '979851'){
+      $('#advGate')?.classList.add('hidden'); $('#advBody')?.classList.remove('hidden');
+      setTimeout(()=> $('#advClientId')?.focus(), 100);
+    } else { alert('Password errata'); }
+  });
   $('#advSave') && ($('#advSave').onclick = ()=>{
-    cfg.CLIENT_ID  = $('#advClientId')?.value.trim() || '';
-    cfg.API_KEY    = $('#advApiKey')?.value.trim() || '';
-    cfg.GMAIL_QUERY= $('#advGmailQuery')?.value.trim() || '';
-    cfg.TEMP_RX    = $('#advTempRx')?.value.trim() || '';
-    cfg.LOGIN_HINT = $('#advLoginHint')?.value.trim() || '';
-    cfg.SCOPES     = $('#advScopes')?.value.trim() || DEFAULTS.SCOPES;
+    cfg.CLIENT_ID   = $('#advClientId')?.value.trim()   || '';
+    cfg.API_KEY     = $('#advApiKey')?.value.trim()     || '';
+    cfg.GMAIL_QUERY = $('#advGmailQuery')?.value.trim() || '';
+    cfg.TEMP_RX     = $('#advTempRx')?.value.trim()     || '';
+    cfg.LOGIN_HINT  = $('#advLoginHint')?.value.trim()  || '';
+    cfg.SCOPES      = $('#advScopes')?.value.trim()     || DEFAULTS.SCOPES;
     saveState();
     (async ()=>{
-      try{ await initGapi(); try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }catch(e){ alert('Errore init: ' + (e?.message || e)); }
+      try { await initGapi(); try{ initGIS(); }catch{} alert('Impostazioni salvate.'); }
+      catch(e){ alert('Errore init: ' + (e?.message || e)); }
     })();
     $('#advModal')?.classList.remove('show');
   });
   $('#advTest') && ($('#advTest').onclick = async ()=>{
-    try{ await signOut(); await signIn('consent'); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); } catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
+    try{ await signOut(); await signIn('consent'); await fetchAlarms(); alert('Accesso OK, storico aggiornato.'); }
+    catch(e){ alert('Errore test accesso: ' + (e?.message || e)); }
   });
   $('#advReset') && ($('#advReset').onclick = ()=>{ localStorage.removeItem('resinelli_monitor'); location.reload(); });
 
-  // Report global
+  // Report globale
   $('#btnReportGlobal')?.addEventListener('click', ()=> openAIReport(null, null));
   // Chiudi report
   $('#aiReportClose') && ($('#aiReportClose').onclick = ()=> $('#aiReportModal')?.classList.remove('show'));
@@ -1585,8 +1638,8 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   // Aggiorna manuale (sidebar)
   $('#btnRefresh')?.addEventListener('click', gmailTick);
 
-  /* Boot order garantito:
-     initGapi() → initGIS() → silent sign-in/restore → fetchAlarms() → startLiveForCurrent() → startGmailPolling()
+  /* Boot order:
+     initGapi() → initGIS() → ensureToken → fetchAlarms() → startLiveForCurrent() → startGmailPolling()
   */
   try { await initGapi(); } catch (e) { console.warn('initGapi fallita', e); }
   try { initGIS(); } catch (e) { console.warn('initGIS fallita', e); }
@@ -1599,7 +1652,11 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   }catch(e){ /* ignora */ }
 
   try{
-    if (gmailService.isConnected()) { await fetchAlarms(); }
+    if (gmailService.isConnected()) {
+      await fetchAlarms();
+      state.gmailLastSync = Date.now();
+      saveState();
+    }
   } catch(e){ console.warn('fetchAlarms iniziale fallita', e); }
 
   try { await startLiveForCurrent(); } catch (e) { console.warn('startLiveForCurrent fallita', e); }
@@ -1607,21 +1664,21 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   startTokenAutoRefresh();
   updateGmailStatusUI();
 
-  // Signin/change account
+  // Signin/change account (forza account chooser)
   async function forceAccountChooser(){
     try{
-      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { openAdvancedModal(); return; }
+      if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) { _openAdvancedModal(); return; }
       if (!window.gapi?.client) { await initGapi(); }
       if (!tokenClient) { initGIS(); }
       await signOut(); await new Promise(r=>setTimeout(r,50));
       const r = await signIn('consent');
-      if (r?.access_token) await fetchAlarms();
+      if (r?.access_token) { await fetchAlarms(); state.gmailLastSync = Date.now(); saveState(); updateGmailStatusUI(); }
     }catch(e){ alert('Errore login: ' + (e?.message || e)); }
   }
-  $('#btnSignIn') && ($('#btnSignIn').onclick = forceAccountChooser);
-  $('#btnChangeAccount') && ($('#btnChangeAccount').onclick = forceAccountChooser);
+  $('#btnSignIn')       && ($('#btnSignIn').onclick       = forceAccountChooser);
+  $('#btnChangeAccount')&& ($('#btnChangeAccount').onclick = forceAccountChooser);
 
-  // Modal riga: chiudi clic overlay
+  // Modal riga: chiusura con click sull’overlay
   $('#rowModal')?.addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
 
   // Cleanup
