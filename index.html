@@ -141,6 +141,10 @@
     }
     /* ...existing code... */
   </style>
+  <!-- AGGIUNGI meta PWA iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Resinelli Monitor">
 </head>
 <body class="min-h-screen selection:bg-sky-200 selection:text-sky-900">
 
@@ -505,7 +509,9 @@ const DEFAULTS = {
   LOGO_URL: "",
   ICON_URL: "",
   DEV_LOGO_URL: "",
-  GMAIL_POLL_MS: 45000
+  GMAIL_POLL_MS: 45000,
+  // AGGIUNGI: Device Flow Client ID
+  DEVICE_FLOW_CLIENT_ID: "" // <-- incolla qui il client ID "TVs and Limited Input"
 };
 
 const DEFAULT_FILIALI = [
@@ -548,6 +554,9 @@ const isSafariAny = (() => {
   const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
   return isSafari; // vale su iOS e macOS Safari
 })();
+
+// Rileva se siamo in PWA/standalone (iOS/Android)
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
 
 /* ===================== HELPER MAPPING FILIALE ROBUSTO ===================== */
 function stripAccents(s){ return s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
@@ -1905,5 +1914,15 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   window.addEventListener('focus', gmailTick);
 });
 </script>
-</body>
-</html>
+
+<!-- AGGIUNGI sotto i tuoi modali -->
+<!-- Device Login (solo PWA) -->
+<div id="deviceModal" class="overlay" aria-modal="true" role="dialog">
+  <div class="glass rounded-2xl p-6 w-[min(520px,92vw)] space-y-3 animate-slide">
+    <div class="flex items-center justify-between">
+      <div class="text-lg font-medium">Accedi a Google</div>
+      <button id="deviceClose" class="btn">Chiudi</button>
+    </div>
+    <div id="deviceBody" class="space-y-3 text-sm"></div>
+  </div>
+</div>
