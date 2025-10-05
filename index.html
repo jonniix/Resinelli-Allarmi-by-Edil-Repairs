@@ -709,12 +709,50 @@ async function signIn(prompt=''){
   });
 }
 
+// AGGIUNGI: signOut usata dal bottone "Test accesso"
+async function signOut(){
+  try{
+    const tk = window.gapi?.client?.getToken?.();
+    if (tk?.access_token && window.google?.accounts?.oauth2){
+      window.google.accounts.oauth2.revoke(tk.access_token, ()=>{});
+      window.gapi.client.setToken(null);
+      state.oauth = null;
+      saveState();
+      updateGmailStatusUI();
+    }
+  }catch(e){ console.warn('signOut', e); }
+}
+
 async function trySilentSignIn(){
   try{
     if (!window.gapi?.client) await initGapi();
     if (!tokenClient) await initGIS();
     return await signIn('');
   }catch{ return null; }
+}
+
+// AGGIUNGI: updateGmailStatusUI usata da vari punti
+function updateGmailStatusUI(){
+  const text = $("#gmail-status-text");
+  const dot  = document.querySelector(".gmail-status .dot");
+  const last = $("#gmailLastSync");
+
+  const connected = gmailService.isConnected();
+
+  if (text) text.textContent = connected ? "Gmail connesso" : "Gmail non connesso";
+  if (dot)  dot.style.backgroundColor = connected ? "#10b981" : "#94a3b8";
+
+  if ($('#quickStats')) {
+    $('#quickStats').textContent = connected
+      ? 'Sincronizzazione attiva. Sto monitorando gli allarmi…'
+      : 'Accedi a Gmail per sincronizzare gli allarmi.';
+  }
+
+  if (last) {
+    last.textContent = state.gmailLastSync
+      ? `Ultimo aggiornamento: ${fmtDate(new Date(state.gmailLastSync))}`
+      : '';
+  }
 }
 
 async function gmailTick(){
@@ -1246,7 +1284,7 @@ function go(route){
   if(route==='home'){
     checkFilialiStatus();
     runCheckFiliali();
-    uiRenderFilialiDesc();
+       uiRenderFilialiDesc();
     uiBindLiveSizer();
     renderHomeStats24h();
   }
