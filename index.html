@@ -520,10 +520,9 @@ let cfg = { ...DEFAULTS };
 let tokenClient = null;
 let loginInFlight = false;
 let gmailPollHandle = null;
-let currentRange = '24h';
-let histSearchTerm = '';
-let histStatus = 'all';
-let histSort = 'date_desc';
+// --- OAuth redirect (implicit grant) per Safari ---
+const REDIRECT_URI = location.origin + location.pathname; // deve essere registrato nel Client OAuth
+const OAUTH_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 
 /* ===================== UTIL ===================== */
 const $ = (sel)=> document.querySelector(sel);
