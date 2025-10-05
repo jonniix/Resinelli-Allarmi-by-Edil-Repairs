@@ -533,12 +533,11 @@ function downloadFile(filename, content, mime='text/plain'){
 function setStatus(msg){ const elBox=$('#statusBox'); if(elBox) elBox.textContent = msg || ""; }
 function showError(msg){ const elBox=$('#errorBox'); if(elBox) elBox.textContent = msg || ""; }
 
-// AGGIUNGI: helper per rilevare Safari/iOS
-const isIOSafari = (() => {
+// SOSTITUISCI: helper per rilevare Safari/iOS
+const isSafariAny = (() => {
   const ua = navigator.userAgent || navigator.vendor || "";
-  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
-  return isIOS && isSafari;
+  return isSafari; // vale su iOS e macOS Safari
 })();
 
 /* ===================== HELPER MAPPING FILIALE ROBUSTO ===================== */
@@ -1282,6 +1281,7 @@ function setActiveTab(hash){
     b.classList.toggle('bg-blue-50', active);
     b.classList.toggle('border-blue-200', active);
     b.classList.toggle('font-semibold', active);
+
   });
 }
 function go(route){
@@ -1763,15 +1763,18 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   updateGmailStatusUI();
 
   // Signin/change account (PATCH: robust async handler)
-  async function openGmailChooserInline(){
+  async function openGmailChooserInline(ev){
     try{
-      // Il popup DEVE partire nello stesso tick del click:
+      // assicurati che l’evento resti “user gesture”
+      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+
+      // Il popup DEVE partire nello stesso tick:
       if (!tokenClient) {
         alert('Login non ancora pronto. Riprova tra pochi secondi.');
         return;
       }
 
-      const promptMode = isIOSafari ? 'consent' : 'select_account';
+      const promptMode = isSafariAny ? 'consent' : 'select_account';
 
       tokenClient.callback = async (resp) => {
         if (resp && resp.access_token) {
@@ -1788,7 +1791,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
         }
       };
 
-      // Chiamata SINCRONA: nessun await prima di questa riga
+      // NESSUN await prima di questa riga
       tokenClient.requestAccessToken({
         prompt: promptMode,
         hint: cfg.LOGIN_HINT || ''
@@ -1796,9 +1799,11 @@ window.addEventListener('DOMContentLoaded', async ()=>{
 
     } catch(e){
       console.warn('openGmailChooserInline:', e);
-      alert('Il login è stato bloccato dal browser. Su Safari assicurati che:\n• i popup non siano bloccati\n• “Impedisci tracking tra siti” sia disattivato per questo sito');
+      alert('Il login è stato bloccato dal browser. Su Safari verifica:\n• popup non bloccati\n• “Impedisci tracking tra siti” disattivato per questo sito');
     }
   }
+  $('#btnSignIn')?.addEventListener('pointerdown', openGmailChooserInline, { passive: false });
+  $('#btnChangeAccount')?.addEventListener('pointerdown', openGmailChooserInline, { passive: false });
   $('#btnSignIn')?.addEventListener('click', openGmailChooserInline);
   $('#btnChangeAccount')?.addEventListener('click', openGmailChooserInline);
 
