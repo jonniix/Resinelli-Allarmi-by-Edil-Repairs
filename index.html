@@ -345,12 +345,20 @@
         </section>
 
         <section id="route-impostazioni" class="hidden space-y-6">
+          <!-- AGGIUNGI: Account Gmail card sopra Branding / Loghi -->
           <div class="glass rounded-2xl p-5">
-            <div class="font-medium mb-3">Profilo</div>
-            <div class="grid sm:grid-cols-2 gap-4">
-              <label class="block text-sm">Nome utente
-                <input id="usernameInput" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" placeholder="Es. Mario" />
+            <div class="font-medium mb-3">Account Gmail</div>
+            <div class="grid sm:grid-cols-3 gap-4 items-end">
+              <label class="block text-sm sm:col-span-2">Email
+                <input id="gmailAccount" class="mt-1 w-full bg-white border border-slateLine rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" value="resinellialimentari@gmail.com" />
               </label>
+              <div class="flex gap-2">
+                <button id="btnOauthLogin" class="btn btn-primary">Accedi / Aggiorna</button>
+                <button id="btnOauthLogout" class="btn">Esci</button>
+              </div>
+            </div>
+            <div class="text-xs opacity-70 mt-2">
+              Su Safari l’accesso usa un reindirizzamento (nessun popup).
             </div>
           </div>
 
@@ -705,6 +713,75 @@ async function initGIS(){
     }
   });
   return tokenClient;
+}
+
+// AGGIUNGI: initCodeFlowForRedirect
+async function initCodeFlowForRedirect(){
+  await waitForGISLoad(20000);
+  // token anti-CSRF
+  const stArr = new Uint32Array(4);
+  crypto.getRandomValues(stArr);
+  const oauthState = Array.from(stArr).join('-');
+  sessionStorage.setItem('oauth_state', oauthState);
+
+  codeClient = google.accounts.oauth2.initCodeClient({
+    client_id: cfg.CLIENT_ID,
+    scope: (cfg?.SCOPES || DEFAULTS.SCOPES),
+    redirect_uri: REDIRECT_URI,
+    ux_mode: 'redirect',       // niente popup
+    state: oauthState,         // verifica al ritorno
+    hint: cfg.LOGIN_HINT || '' // precompila l’account
+  });
+}
+
+function getQueryParam(name){
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
+
+async function handleOauthRedirectIfAny(){
+  const code = getQueryParam('code');
+  const stateRcv = getQueryParam('state');
+  const err = getQueryParam('error');
+
+  if (err){
+    console.warn('OAuth error:', err);
+    history.replaceState({}, document.title, REDIRECT_URI);
+    return;
+  }
+  if (!code) return;
+
+  const expected = sessionStorage.getItem('oauth_state');
+  if (expected && stateRcv && expected !== stateRcv){
+    console.warn('OAuth state mismatch');
+    history.replaceState({}, document.title, REDIRECT_URI);
+    return;
+  }
+
+  try{
+    // Scambia CODE -> TOKEN sul backend
+    const resp = await fetch('/oauth/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ code, redirect_uri: REDIRECT_URI })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json(); // atteso: { access_token, expires_in }
+
+    if (!data.access_token) throw new Error('Nessun access_token dal backend');
+
+    // Applica token a gapi + stato locale esistente
+    window.gapi?.client?.setToken?.({ access_token: data.access_token });
+    setAccessTokenFromResp({ access_token: data.access_token, expires_in: data.expires_in || 3600 });
+    updateGmailStatusUI();
+    try { await fetchAlarms(); } catch(_){}
+  } catch(e){
+    console.error('Exchange code→token fallito:', e);
+    alert('Accesso non riuscito. Riprova.');
+  } finally {
+    // pulisci URL
+    history.replaceState({}, document.title, REDIRECT_URI);
+  }
 }
 
 async function signIn(prompt=''){
@@ -1787,7 +1864,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
           try {
             window.gapi?.client?.setToken?.({ access_token: resp.access_token });
             setAccessTokenFromResp(resp);
-            try { await fetchAlarms(); } catch(_) {}
+            try { await fetchAlarms(); } catch(_){}
             updateGmailStatusUI();
           } catch(e) {
             console.warn('Post-login error:', e);
