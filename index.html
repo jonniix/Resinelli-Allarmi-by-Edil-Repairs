@@ -524,6 +524,60 @@ let gmailPollHandle = null;
 const REDIRECT_URI = location.origin + location.pathname; // deve essere registrato nel Client OAuth
 const OAUTH_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 
+// AGGIUNGI subito dopo le costanti OAuth
+function forceSafariRedirectLogin(prompt='consent'){
+  try{
+    const a = new Uint32Array(4);
+    crypto.getRandomValues(a);
+    const oauthState = Array.from(a).join('-');
+    sessionStorage.setItem('oauth_state', oauthState);
+
+    const p = new URLSearchParams({
+      client_id: cfg.CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      response_type: 'token', // implicit grant → access_token nel fragment
+      scope: cfg.SCOPES || DEFAULTS.SCOPES,
+      include_granted_scopes: 'true',
+      prompt
+    });
+    if (cfg.LOGIN_HINT) p.set('login_hint', cfg.LOGIN_HINT);
+    p.set('state', oauthState);
+
+    location.assign(`${OAUTH_AUTH_ENDPOINT}?${p.toString()}`);
+  }catch(e){
+    console.warn('forceSafariRedirectLogin', e);
+    alert('Impossibile avviare il login (redirect). Controlla Client ID e Redirect URI.');
+  }
+}
+
+async function handleImplicitFragmentToken(){
+  const hash = (location.hash||'').slice(1);
+  if (!hash) return;
+
+  const params = new URLSearchParams(hash);
+  const access_token = params.get('access_token');
+  const expires_in   = parseInt(params.get('expires_in')||'3600',10);
+  const stateRcv     = params.get('state');
+  const expected     = sessionStorage.getItem('oauth_state');
+
+  // pulisci URL
+  if (access_token || params.get('error')) {
+    history.replaceState({}, document.title, REDIRECT_URI);
+  }
+  if (!access_token) return;
+  if (expected && stateRcv && expected !== stateRcv) return;
+
+  try{
+    window.gapi?.client?.setToken?.({ access_token });
+    setAccessTokenFromResp({ access_token, expires_in });
+    updateGmailStatusUI();
+    try { await fetchAlarms(); } catch(_){}
+  }catch(e){
+    console.error('handleImplicitFragmentToken', e);
+    alert('Accesso non riuscito dopo il redirect.');
+  }
+}
+
 /* ===================== UTIL ===================== */
 const $ = (sel)=> document.querySelector(sel);
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild }
@@ -1717,6 +1771,9 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   try { await initGapi(); } catch(e){ console.warn('initGapi fallita', e); }
   try { await initGIS(); }  catch(e){ console.warn('initGIS fallita', e); }
 
+  // Richiama la gestione del fragment all’avvio
+  try { await handleImplicitFragmentToken(); } catch(e){ console.warn(e); }
+
   if (tokenClient) {
     b1?.removeAttribute('disabled');
     b2?.removeAttribute('disabled');
@@ -1887,21 +1944,39 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   }
 
   // SOSTITUISCI binding ai bottoni login/account
-  const bindSigninBtn = (btn) => {
-    if (!btn) return;
-    // iOS Safari preferisce touchend; click rimane il fallback universale
-    btn.addEventListener('touchend', openGmailChooserInline, { passive: false });
-    btn.addEventListener('click', openGmailChooserInline);
+  const doLoginFromSettings = (ev)=>{
+    ev?.preventDefault?.();
+    cfg.LOGIN_HINT = ($('#gmailAccount')?.value || cfg.LOGIN_HINT || '').trim();
+    saveState();
+
+    if (isSafariAny){
+      // niente popup su Safari: vai di redirect
+      return forceSafariRedirectLogin('consent');
+    }
+    // altri browser: popup GIS
+    return openGmailChooserInline(ev);
   };
-  bindSigninBtn($('#btnSignIn'));
-  bindSigninBtn($('#btnChangeAccount'));
 
-  // Modal riga: chiudi clic overlay
-  $('#rowModal')?.addEventListener('click', (e)=>{ if (e.target===e.currentTarget) e.currentTarget.classList.remove('show'); });
+  // Impostazioni
+  $('#btnOauthLogin') ?.addEventListener('click', doLoginFromSettings);
+  $('#btnOauthLogin') ?.addEventListener('touchend', doLoginFromSettings, { passive:false });
+  $('#btnOauthLogout')?.addEventListener('click', async ()=>{ await signOut(); alert('Sei uscito dall’account.'); });
 
-  // Cleanup
-  window.addEventListener('beforeunload', ()=>{ stopWhepResource(); cleanupWebRTC(); destroyJitsi(); stopGmailPolling(); });
-  window.addEventListener('focus', gmailTick);
+  // Top bar
+  $('#btnSignIn')       ?.addEventListener('click', doLoginFromSettings);
+  $('#btnSignIn')       ?.addEventListener('touchend', doLoginFromSettings, { passive:false });
+  $('#btnChangeAccount')?.addEventListener('click', doLoginFromSettings);
+  $('#btnChangeAccount')?.addEventListener('touchend', doLoginFromSettings, { passive:false });
+
+  // Forza login dal tasto “Aggiorna” se non connesso su Safari
+  $('#btnRefresh')?.addEventListener('click', async ()=>{
+    if (!gmailService.isConnected() && isSafariAny){
+      return forceSafariRedirectLogin('consent');
+    }
+    return gmailTick();
+  });
+
+  // ...existing code...
 });
 </script>
 </body>
