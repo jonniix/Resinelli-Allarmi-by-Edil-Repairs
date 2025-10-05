@@ -113,6 +113,33 @@
       .print-footer{ position:fixed; bottom:0; left:0; right:0; font-size:12px; padding:8px 16px; display:flex; justify-content:flex-start; align-items:center; border-top:1px solid #ccc; }
       .print-logos{ display:none !important; } /* RIMOSSI LOGHI */
     }
+
+    /* Modali responsive e scrollabili su mobile */
+    .overlay .glass{
+      max-height: 92svh;
+      overflow: auto;
+    }
+
+    @media (max-width: 640px){
+      /* Assicura padding interno e nessun taglio */
+      .overlay .glass{
+        width: min(96vw, 860px);
+        margin: 2svh 0;
+      }
+    }
+
+    /* Evita che il body sotto interferisca col tocco */
+    .overlay{ overscroll-behavior: contain; }
+
+    @supports (padding: max(0px)){
+      header.glass{ padding-left: max(0px, env(safe-area-inset-left)); padding-right: max(0px, env(safe-area-inset-right)); }
+      body{ padding-bottom: env(safe-area-inset-bottom); }
+    }
+
+    @media (max-width: 480px){
+      .stream-box{ max-height: 88svh; }
+    }
+    /* ...existing code... */
   </style>
 </head>
 <body class="min-h-screen selection:bg-sky-200 selection:text-sky-900">
@@ -416,7 +443,7 @@
 
   <!-- Report IA -->
   <div id="aiReportModal" class="overlay" aria-modal="true" role="dialog">
-    <div class="glass rounded-2xl p-0 w-[min(860px,96vw)] animate-slide">
+    <div class="glass rounded-2xl p-0 w-[min(860px,96vw)] max-h-[92svh] overflow-auto animate-slide">
       <div class="p-4 border-b border-[#E5E7EB] flex items-center justify-between">
         <div class="text-lg font-medium" id="aiReportTitle">Report IA</div>
         <div class="flex items-center gap-2">
@@ -452,7 +479,7 @@
 
   <!-- Dettaglio riga -->
   <div id="rowModal" class="overlay" aria-modal="true" role="dialog">
-    <div id="rowModalBody" class="glass rounded-2xl p-6 w-[min(720px,92vw)] animate-slide"></div>
+    <div id="rowModalBody" class="glass rounded-2xl p-6 w-[min(720px,96vw)] max-h-[92svh] overflow-auto animate-slide"></div>
   </div>
 
   <!-- ========== APP SCRIPT ========== -->
@@ -470,7 +497,7 @@ const DEFAULTS = {
   LOGO_URL: "",
   ICON_URL: "",
   DEV_LOGO_URL: "",
-  GMAIL_POLL_MS: 15000  // CAMBIATO DA 60000 A 15000
+  GMAIL_POLL_MS: 45000
 };
 
 const DEFAULT_FILIALI = [
@@ -592,25 +619,54 @@ function isTokenValid(){
 }
 async function ensureToken(){
   try{
-    if (!isTokenValid()){
-      await signIn('');
-    } else {
+    if (isTokenValid()){
       if (!gmailService.isConnected()) {
         window.gapi?.client?.setToken?.({ access_token: state.oauth.access_token });
       }
+      return;
     }
+    // Token non valido → prova silent refresh, MAI aprire popup qui
+    await trySilentRefresh();
   }catch(e){ /* silente */ }
 }
 function startTokenAutoRefresh(){
   setInterval(async ()=>{
     const msLeft = (state?.oauth?.expires_at||0) - Date.now();
     if (!state?.oauth?.access_token || msLeft < 2*60*1000){
-      try { await signIn(''); } catch(_){}
+      try { await trySilentRefresh(); } catch(_){}
     }
   }, 60*1000);
 }
 
-function initGIS(){
+/* ======= Silent refresh no-popup & backoff ======= */
+let lastSilentTry = 0;
+let silentBackoffMs = 0;
+
+async function trySilentRefresh(){
+  // Evita tentativi troppo ravvicinati o in background tab
+  if (document.visibilityState !== 'visible') return false;
+  const now = Date.now();
+  if (now - lastSilentTry < Math.max(15000, silentBackoffMs)) return false;
+
+  lastSilentTry = now;
+  try{
+    if (!tokenClient) initGIS();
+    await new Promise((resolve, reject)=>{
+      tokenClient.callback = (r)=> r?.access_token ? resolve(r) : reject(r);
+      tokenClient.requestAccessToken({ prompt: '', hint: cfg.LOGIN_HINT || '' });
+    });
+    // Successo → reset backoff
+    silentBackoffMs = 0;
+    updateGmailStatusUI();
+    return true;
+  }catch(e){
+    // Fallito → aumenta backoff, non mostrare popup
+    silentBackoffMs = Math.min(5*60*1000, (silentBackoffMs||10000)*1.7);
+    return false;
+  }
+}
+
+async function initGIS(){
   if (!cfg?.CLIENT_ID || !cfg.CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
     alert('Devi impostare il Google OAuth CLIENT_ID.');
     openAdvancedModal();
@@ -691,8 +747,11 @@ async function gmailTick(){
     }
     await updateGmailStatusUI();
   }catch(e){
-    const text = $("#gmail-status-text"); if (text) text.textContent = "Gmail: errore";
-    console.error('gmailTick', e);
+    // Se semplicemente non siamo loggati, non mostrare "errore"
+    if (gmailService.isConnected()){
+      const text = $("#gmail-status-text"); if (text) text.textContent = "Gmail: errore";
+      console.error('gmailTick', e);
+    }
   } finally { if (sp) sp.style.display='none'; }
 }
 
@@ -847,7 +906,9 @@ function startJitsi(f) {
 
   if (!f.jitsiDomain || !f.jitsiRoom || typeof window.JitsiMeetExternalAPI === 'undefined') {
     none.classList.remove('hidden'); box.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden');
-    showError(!window.JitsiMeetExternalAPI ? 'API Jitsi non caricata.' : 'Config Jitsi incompleta (domain/room).'); return;
+    showError(!window.JitsiMeetExternalAPI ? 'API Jitsi non caricata.' : 'Config Jitsi incompleta (domain/room).');
+    $('#statusBox') && ($('#statusBox').textContent = 'Jitsi non disponibile su questo dispositivo o rete.');
+    return;
   }
   none.classList.add('hidden'); frame.classList.add('hidden'); vid.classList.add('hidden'); box.classList.remove('hidden');
 
