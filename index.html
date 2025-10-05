@@ -533,6 +533,14 @@ function downloadFile(filename, content, mime='text/plain'){
 function setStatus(msg){ const elBox=$('#statusBox'); if(elBox) elBox.textContent = msg || ""; }
 function showError(msg){ const elBox=$('#errorBox'); if(elBox) elBox.textContent = msg || ""; }
 
+// AGGIUNGI: helper per rilevare Safari/iOS
+const isIOSafari = (() => {
+  const ua = navigator.userAgent || navigator.vendor || "";
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(ua);
+  return isIOS && isSafari;
+})();
+
 /* ===================== HELPER MAPPING FILIALE ROBUSTO ===================== */
 function stripAccents(s){ return s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function normName(s){
@@ -1757,21 +1765,38 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   // Signin/change account (PATCH: robust async handler)
   async function openGmailChooserInline(){
     try{
-      if (!tokenClient) await initGIS();            // garantisce il client
-      tokenClient.callback = async (resp)=>{
-        if (resp?.access_token){
-          window.gapi?.client?.setToken?.({ access_token: resp.access_token });
-          setAccessTokenFromResp(resp);
-          try { await fetchAlarms(); } catch(_) {}
-          updateGmailStatusUI();
+      // Il popup DEVE partire nello stesso tick del click:
+      if (!tokenClient) {
+        alert('Login non ancora pronto. Riprova tra pochi secondi.');
+        return;
+      }
+
+      const promptMode = isIOSafari ? 'consent' : 'select_account';
+
+      tokenClient.callback = async (resp) => {
+        if (resp && resp.access_token) {
+          try {
+            window.gapi?.client?.setToken?.({ access_token: resp.access_token });
+            setAccessTokenFromResp(resp);
+            try { await fetchAlarms(); } catch(_) {}
+            updateGmailStatusUI();
+          } catch(e) {
+            console.warn('Post-login error:', e);
+          }
+        } else {
+          console.warn('Login callback senza access_token', resp);
         }
       };
+
+      // Chiamata SINCRONA: nessun await prima di questa riga
       tokenClient.requestAccessToken({
-        prompt: 'select_account',
+        prompt: promptMode,
         hint: cfg.LOGIN_HINT || ''
       });
-    }catch(e){
-      alert('Login non disponibile: ' + (e?.message || e));
+
+    } catch(e){
+      console.warn('openGmailChooserInline:', e);
+      alert('Il login è stato bloccato dal browser. Su Safari assicurati che:\n• i popup non siano bloccati\n• “Impedisci tracking tra siti” sia disattivato per questo sito');
     }
   }
   $('#btnSignIn')?.addEventListener('click', openGmailChooserInline);
