@@ -95,6 +95,16 @@
     /* Badge */
     .badge{ display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .5rem; border-radius:.6rem; font-size:.75rem; border:1px solid #E5E7EB; background:#fff; }
 
+    /* Sticky filtri storico su desktop */
+    @media (min-width: 1024px){
+      #filterRangeWrap{
+        position: sticky;
+        top: 1rem;
+        z-index: 30;
+        background: #fff;
+      }
+    }
+
     /* Print */
     @media print{
       header, nav, #advModal, #rowModal, #aiReportModal, #statusBar, #route-impostazioni, #btnExportCsv, #btnPrint, #filterRangeWrap { display:none !important; }
@@ -151,6 +161,7 @@
             <span class="dot inline-block w-2.5 h-2.5 rounded-full bg-slate-400" aria-hidden="true"></span>
             <span id="gmail-status-text" aria-live="polite">Gmail</span>
             <span class="spinner" role="status" aria-live="polite" aria-label="Caricamento Gmail" id="gmailSpinner" style="display:none"></span>
+            <span id="gmailLastSync" class="ml-2 text-xs opacity-60"></span>
             <button id="btnRefresh" class="btn text-xs ml-auto" aria-label="Rileggi Gmail">Aggiorna</button>
           </div>
 
@@ -458,7 +469,7 @@ const DEFAULTS = {
   LOGO_URL: "",
   ICON_URL: "",
   DEV_LOGO_URL: "",
-  GMAIL_POLL_MS: 60000
+  GMAIL_POLL_MS: 15000
 };
 
 const DEFAULT_FILIALI = [
@@ -468,7 +479,7 @@ const DEFAULT_FILIALI = [
 ];
 
 /* Stato: aggiunti filialeNames + oauth (token persistito) */
-let state = { username: '', filiali: [], history: {}, version: APP_VERSION, filialeNames: {}, oauth: null };
+let state = { username: '', filiali: [], history: {}, version: APP_VERSION, filialeNames: {}, oauth: null, gmailLastSync: null };
 let cfg = { ...DEFAULTS };
 let tokenClient = null;
 let gmailPollHandle = null;
@@ -631,10 +642,16 @@ async function trySilentSignIn(){
 async function updateGmailStatusUI(){
   const text = $("#gmail-status-text");
   const dot = document.querySelector(".gmail-status .dot");
+  const last = $("#gmailLastSync");
   const connected = gmailService.isConnected();
   if (text) text.textContent = connected ? "Gmail connesso" : "Gmail non connesso";
   if (dot) dot.style.backgroundColor = connected ? "#10b981" : "#94a3b8";
   if ($('#quickStats')) $('#quickStats').textContent = connected ? 'Sincronizzazione attiva. Sto monitorando gli allarmi…' : 'Accedi a Gmail per sincronizzare gli allarmi.';
+  if (last) {
+    last.textContent = state.gmailLastSync
+      ? `Ultimo aggiornamento: ${fmtDate(new Date(state.gmailLastSync))}`
+      : '';
+  }
 }
 
 function startGmailPolling(){
@@ -647,7 +664,11 @@ async function gmailTick(){
   const sp = $('#gmailSpinner'); if (sp) sp.style.display='inline-block';
   try{
     await ensureToken();
-    if (gmailService.isConnected()) await gmailService.fetchEmails();
+    if (gmailService.isConnected()) {
+      await gmailService.fetchEmails();
+      state.gmailLastSync = Date.now();
+      saveState();
+    }
     await updateGmailStatusUI();
   }catch(e){
     const text = $("#gmail-status-text"); if (text) text.textContent = "Gmail: errore";
@@ -742,25 +763,29 @@ async function fetchAlarms(){
     const low = (subject+'\n'+body).toLowerCase();
 
     const fid = (function(){
-      if(filialeName){
-        const needle = filialeName.toLowerCase();
-        const byHint = (state.filiali||[]).find(f => f.name.toLowerCase().includes(needle));
-        if(byHint) return byHint.id;
-      }
-      for(const f of (state.filiali||[])){ if(low.includes(f.name.toLowerCase())) return f.id; }
+      const m = findFilialeIdFromText(filialeName, subject + '\n' + body);
+      if (m) return m;
       return $('#filialeSelect')?.value || state.filiali[0]?.id;
     })();
 
-    // Aggiorna mapping ID -> Nome quando possibile
-    if (filialeName) { state.filialeNames[fid] = filialeName; }
+    if (filialeName) state.filialeNames[fid] = filialeName;
 
-    const displayName = (state.filiali||[]).find(x=>x.id===fid)?.name || filialeName || state.filialeNames[fid] || fid;
+    const displayName =
+      (state.filiali.find(x=>x.id===fid)?.name) ||
+      filialeName ||
+      state.filialeNames[fid] ||
+      fid;
 
     const row = {
-      id:m.id, date:+d, temp, min, max, status, subject,
-      bodyPlain: body, cellKey: normalizeText(cella).toLowerCase(),
-      fid, displayName,
-      messageId: getHeader(msg, 'Message-Id') || '' // per link ricerca
+      id: m.id,
+      date: +d,
+      temp, min, max,
+      status, subject,
+      bodyPlain: body,
+      cellKey: normalizeText(cella).toLowerCase(),
+      fid,
+      displayName,
+      messageId: getHeader(msg, 'Message-Id') || ''
     };
     if(!state.history[fid]) state.history[fid]=[];
     if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
@@ -1264,15 +1289,11 @@ function renderStorico(){
   wrap.innerHTML='';
   const range = currentRange;
 
-  // ordina gruppi per nome visuale
-  const groups = Object.keys(state.history||{}).map(fid=>{
-    const rowsAll = filterRowsByRange(state.history[fid]||[], range);
+  const groups = (state.filiali || []).map(f => {
+    const fid = f.id;
+    const rowsAll = filterRowsByRange(state.history[fid] || [], range);
     const rows = sortRows(rowsAll.filter(rowMatches));
-    const displayName =
-      (state.filiali||[]).find(x=>x.id===fid)?.name ||
-      state.filialeNames[fid] ||
-      (rows[0]?.displayName) ||
-      fid; // FINALE: mai più UUID grezzo in vista
+    const displayName = f.name || state.filialeNames[fid] || fid;
     return { fid, displayName, rows };
   }).sort((a,b)=> a.displayName.localeCompare(b.displayName, 'it'));
 
@@ -1345,52 +1366,52 @@ function renderImpostazioni(){
     const card = el(`<div class="glass rounded-xl p-3">
   <div class="grid md:grid-cols-12 gap-3 items-start">
     <label class="block text-sm md:col-span-3">Nome
-      <input data-k="name" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.name}" />
+      <input data-k="name" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.name}" />
     </label>
     <label class="block text-sm md:col-span-3">Email storico
-      <input data-k="email" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.email}" />
+      <input data-k="email" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.email}" />
     </label>
     <label class="block text-sm md:col-span-2">Provider
       <select data-k="streamProvider" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200">
-        <option value="jitsi" ${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
-        <option value="vdo" ${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
-        <option value="whep" ${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
+        <option value="jitsi" \${f.streamProvider==='jitsi'?'selected':''}>Jitsi Meet</option>
+        <option value="vdo" \${f.streamProvider==='vdo'?'selected':''}>VDO.Ninja</option>
+        <option value="whep" \${f.streamProvider==='whep'?'selected':''}>WHEP/Worker</option>
       </select>
     </label>
 
-    <div data-group="jitsi" class="md:col-span-4" style="${f.streamProvider==='jitsi'?'':'display:none'}">
+    <div data-group="jitsi" class="md:col-span-4" style="\${f.streamProvider==='jitsi'?'':'display:none'}">
       <label class="block text-sm">Jitsi domain
-        <input data-k="jitsiDomain" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.jitsiDomain||'meet.jit.si'}" />
+        <input data-k="jitsiDomain" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.jitsiDomain||'meet.jit.si'}" />
       </label>
       <label class="block text-sm">Room
-        <input data-k="jitsiRoom" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.jitsiRoom||''}" />
+        <input data-k="jitsiRoom" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.jitsiRoom||''}" />
       </label>
       <label class="block text-sm">Password (visibile)
-        <input data-k="jitsiPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.jitsiPass||''}" />
+        <input data-k="jitsiPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.jitsiPass||''}" />
       </label>
     </div>
 
-    <div data-group="vdo" class="md:col-span-3" style="${f.streamProvider==='vdo'?'':'display:none'}">
+    <div data-group="vdo" class="md:col-span-3" style="\${f.streamProvider==='vdo'?'':'display:none'}">
       <label class="block text-sm">VDO View ID
-        <input data-k="vdoViewId" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.vdoViewId||''}" />
+        <input data-k="vdoViewId" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.vdoViewId||''}" />
       </label>
       <label class="block text-sm">VDO Password
-        <input data-k="vdoPassword" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.vdoPassword||''}" />
+        <input data-k="vdoPassword" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.vdoPassword||''}" />
       </label>
     </div>
 
-    <div data-group="whep" class="md:col-span-4" style="${f.streamProvider==='whep'?'':'display:none'}">
+    <div data-group="whep" class="md:col-span-4" style="\${f.streamProvider==='whep'?'':'display:none'}">
       <label class="block text-sm">URL WHEP (HTTPS)
-        <input data-k="streamUrl" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.streamUrl||''}" />
+        <input data-k="streamUrl" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.streamUrl||''}" />
       </label>
       <label class="block text-sm">ID
-        <input data-k="streamUser" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.streamUser||''}" />
+        <input data-k="streamUser" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.streamUser||''}" />
       </label>
       <label class="block text-sm">Password
-        <input data-k="streamPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="${f.streamPass||''}" />
+        <input data-k="streamPass" class="mt-1 w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-200" value="\${f.streamPass||''}" />
       </label>
       <label class="flex items-center gap-2 text-sm mt-2">
-        <input type="checkbox" data-k="streamAudio" ${f.streamAudio?'checked':''} class="accent-emerald-500"> Audio (se supportato)
+        <input type="checkbox" data-k="streamAudio" \${f.streamAudio?'checked':''} class="accent-emerald-500"> Audio (se supportato)
       </label>
     </div>
 
