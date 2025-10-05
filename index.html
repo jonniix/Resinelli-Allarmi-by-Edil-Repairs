@@ -820,12 +820,27 @@ function filterRowsByRange(rows, range){
 
 async function fetchAlarms(){
   const q = cfg.GMAIL_QUERY;
-  const msgs = await listMessages(q, 600);
-  for(const m of msgs){
+  const msgs = await listMessages(q, 600);   // elenco "vero" attuale
+  const newHistory = {};                     // nuovo storico ricostruito
+
+  function findFilialeByEmailHeaders(toHdr, deliv, fromHdr){
+    const to=(toHdr||'').toLowerCase(), del=(deliv||'').toLowerCase(), from=(fromHdr||'').toLowerCase();
+    for (const f of (state.filiali||[])) {
+      const mail=(f.email||'').toLowerCase().trim();
+      if (!mail) continue;
+      if (to.includes(mail) || del.includes(mail) || from.includes(mail)) return f.id;
+    }
+    return null;
+  }
+
+  for(const m of (msgs||[])){
     const msg = await getMessage(m.id);
     if (!msg || !msg.payload) continue;
+
     const subject = getHeader(msg,'Subject')||'(senza oggetto)';
     const d = new Date(Number(msg.internalDate||Date.now()));
+
+    // estrai body (testo semplice se disponibile, altrimenti html ripulito)
     let body=''; (function extract(part){
       if(!part) return;
       if(part.mimeType==='text/plain' && part.body?.data){ body += decodeBody(part.body.data) + '\n'; }
@@ -833,22 +848,25 @@ async function fetchAlarms(){
       if(part.mimeType==='text/html' && !body && part.body?.data){ body = decodeBody(part.body.data).replace(/<[^>]+>/g,' '); }
     })(msg.payload);
 
+    // stato + temperature
     let status = inferStatusSmart(subject, body);
     const { temp, min, max } = parseTemperatures(subject, body);
     if(status==='alto' && isFinite(temp) && isFinite(min) && isFinite(max) && min <= temp && temp <= max){ status = 'ok'; }
-    if(!status) continue;
+    if(!status) continue; // ignora mail non riconosciute
 
+    // deduzione filiale (priorità: subject → email → testo → selezione corrente)
     const { filiale: filialeName, cella } = extractCellAndFiliale(subject);
-    const low = (subject+'\n'+body).toLowerCase();
-
-    // MODIFICATO: mapping filiale robusto
     const fid = (function(){
-      const m = findFilialeIdFromText(filialeName, subject + '\n' + body);
-      if (m) return m;
-      return $('#filialeSelect')?.value || state.filiali[0]?.id;
+      let id = findFilialeIdFromText(filialeName, subject + '\n' + body);
+      if (id) return id;
+      const id2 = findFilialeByEmailHeaders(getHeader(msg,'To'), getHeader(msg,'Delivered-To'), getHeader(msg,'From'));
+      if (id2) return id2;
+      id = findFilialeIdFromText('', subject + '\n' + body);
+      if (id) return id;
+      return $('#filialeSelect')?.value || null; // ultimo fallback
     })();
+    if (!fid) continue;
 
-    // AGGIORNA mapping se dal subject arriva un nome
     if (filialeName) state.filialeNames[fid] = filialeName;
 
     const displayName =
@@ -868,12 +886,18 @@ async function fetchAlarms(){
       displayName,
       messageId: getHeader(msg, 'Message-Id') || ''
     };
-    if(!state.history[fid]) state.history[fid]=[];
-    if(!state.history[fid].some(r=>r.id===row.id)) state.history[fid].push(row);
+
+    (newHistory[fid] ||= []);
+    if(!newHistory[fid].some(r=>r.id===row.id)) newHistory[fid].push(row);
   }
-  for(const fid of Object.keys(state.history)){
-    state.history[fid] = state.history[fid].sort((a,b)=>a.date-b.date).slice(-2000);
+
+  // ordina e limita
+  for(const fid of Object.keys(newHistory)){
+    newHistory[fid] = newHistory[fid].sort((a,b)=>a.date-b.date).slice(-2000);
   }
+
+  // 🔥 HARD SYNC: sostituisce lo storico con quello appena ricostruito
+  state.history = newHistory;
   saveState();
   refreshUIAfterData();
 }
