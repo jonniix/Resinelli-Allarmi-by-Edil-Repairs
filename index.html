@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Resinelli Monitor</title>
+  <title>Resinelli Monitor </title>
 
   <!-- Favicon dinamica -->
   <link id="dynamic-favicon" rel="icon" href="data:," />
@@ -1969,11 +1969,13 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   // SOSTITUISCI binding ai bottoni login/account
   function doLogin(ev){
     ev?.preventDefault?.();
-    // In PWA/standalone su Safari usa il Device Flow
+
+    // In PWA/standalone su Safari usa il Device Flow (se hai impostato il CLIENT_ID dedicato)
     if (isStandalone && isSafariAny && (cfg.DEVICE_FLOW_CLIENT_ID || '').trim()){
       startDeviceFlow();
       return;
     }
+
     // Altrimenti GIS classico (popup/iframe)
     openGmailChooserInline(ev);
   }
@@ -1985,20 +1987,25 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     b.addEventListener('touchend', doLogin, { passive:false });
     b.addEventListener('click', doLogin);
   });
+
   // Logout in Impostazioni
   document.querySelector('#btnOauthLogout')?.addEventListener('click', signOut);
 
-  // ...existing code...
-});
+}); // <-- chiude il tuo DOMContentLoaded / init principale
 </script>
-<!-- AGGIUNGI sotto i tuoi modali -->
-<!-- Device Login (solo PWA) -->
+
+<!-- ========== MODALE DEVICE LOGIN (solo PWA/Safari) ========== -->
 <div id="deviceModal" class="overlay" aria-modal="true" role="dialog">
   <div class="glass rounded-2xl p-6 w-[min(520px,92vw)] space-y-3 animate-slide">
     <div class="flex items-center justify-between">
       <div class="text-lg font-medium">Accedi a Google</div>
       <button id="deviceClose" class="btn">Chiudi</button>
     </div>
-    <div id="deviceBody" class="space-y-3 text-sm"></div>
+    <div id="deviceBody" class="space-y-3 text-sm">
+      <!-- Qui il codice riempirà dinamicamente le istruzioni del device flow -->
+    </div>
   </div>
 </div>
+
+</body>
+</html>
