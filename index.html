@@ -511,7 +511,8 @@ const DEFAULTS = {
   DEV_LOGO_URL: "",
   GMAIL_POLL_MS: 45000,
   // AGGIUNGI: Device Flow Client ID
-  DEVICE_FLOW_CLIENT_ID: "" // <-- incolla qui il client ID "TVs and Limited Input"
+  DEVICE_FLOW_CLIENT_ID: "", // <-- incolla qui il client ID "TVs and Limited Input"
+  ALARM_TIMEOUT_MS: 10*60*1000 // <-- timeout rientro automatico (10 minuti)
 };
 
 const DEFAULT_FILIALI = [
@@ -1009,10 +1010,76 @@ async function fetchAlarms(){
     newHistory[fid] = newHistory[fid].sort((a,b)=>a.date-b.date).slice(-2000);
   }
 
-  // 🔥 HARD SYNC: sostituisce lo storico con quello appena ricostruito
-  state.history = newHistory;
+  // stato: ricostruito
+  state.history = applyAutoResolve(newHistory);
   saveState();
   refreshUIAfterData();
+}
+
+// ===================== AUTO RESOLVE LOGICA RIENTRO =====================
+function applyAutoResolve(historyByFid, nowTs = Date.now()) {
+  const out = {};
+  const T = Number(cfg.ALARM_TIMEOUT_MS || (10*60*1000));
+
+  for (const fid of Object.keys(historyByFid || {})) {
+    const rows = (historyByFid[fid] || []).slice().sort((a,b)=>a.date - b.date);
+    if (!rows.length) { out[fid] = rows; continue; }
+
+    // Group per cella
+    const byCell = new Map();
+    for (const r of rows) {
+      const cell = (r.cellKey || statusCellKey(r.subject)).toLowerCase();
+      if (!byCell.has(cell)) byCell.set(cell, []);
+      byCell.get(cell).push(r);
+    }
+
+    const merged = [];
+    for (const [cell, events] of byCell.entries()) {
+      // Rimuovi eventuali sintetici obsoleti (ripartiamo puliti)
+      const base = events.filter(e => !e.synthetic).sort((a,b)=>a.date - b.date);
+
+      // Cammina la timeline
+      for (let i = 0; i < base.length; i++) {
+        const e = base[i];
+        merged.push(e);
+
+        if (e.status !== 'alto') continue;
+
+        const alto = e;
+        const next = base[i+1]; // prossima email reale su quella cella
+
+        const deadline = alto.date + T;
+        const hasRealOkAfter = base.slice(i+1).some(x => x.status === 'ok');
+
+        // Se c'è un evento successivo prima del deadline, niente sintetico.
+        if (next && next.date <= deadline) continue;
+
+        // Se esiste un OK reale più avanti, niente sintetico.
+        if (hasRealOkAfter) continue;
+
+        // Se la finestra è scaduta rispetto a nowTs, inserisci OK sintetico alla data precisa del deadline
+        if (nowTs >= deadline) {
+          merged.push({
+            id: `synthetic-${fid}-${cell}-${alto.id || alto.date}`,
+            date: deadline,
+            temp: NaN, min: NaN, max: NaN,
+            status: 'ok',
+            subject: '[SINTETICO] Rientro automatico (nessuna nuova email)',
+            bodyPlain: 'Rientro dedotto per assenza di nuove email entro il timeout.',
+            cellKey: cell,
+            fid,
+            displayName: e.displayName || (state.filiali.find(x=>x.id===fid)?.name) || state.filialeNames[fid] || fid,
+            messageId: '',
+            synthetic: true
+          });
+        }
+      }
+    }
+
+    out[fid] = merged.sort((a,b)=>a.date-b.date).slice(-2000);
+  }
+
+  return out;
 }
 
 /* ===================== DEVICE FLOW ===================== */
@@ -1547,13 +1614,17 @@ function openRowModal(fid, r){
   body.innerHTML = `
     <div class="flex items-start justify-between gap-3">
       <div>
-        <div class="text-lg font-semibold">${displayName}</div>
+        <div class="text-lg font-semibold">${displayName}
+          ${r.synthetic ? '<span class="ml-2 px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-700 border border-slate-300 align-middle">Sintetico</span>' : ''}
+        </div>
         <div class="text-sm opacity-70">${fmtDate(new Date(r.date))}</div>
       </div>
       <button class="btn" id="rowClose" aria-label="Chiudi dettaglio">Chiudi</button>
     </div>
     <div class="mt-3 p-3 border rounded-lg bg-white">
-      <div class="text-sm"><b>Stato:</b> ${r.status==='alto'?'<span class="text-rose-700">ALLARME</span>':'<span class="text-emerald-700">OK</span>'}</div>
+      <div class="text-sm"><b>Stato:</b> ${r.status==='alto'?'<span class="text-rose-700">ALLARME</span>':'<span class="text-emerald-700">OK</span>'}
+        ${r.synthetic ? '<span class="ml-2 px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-700 border border-slate-300 align-middle">Sintetico</span>' : ''}
+      </div>
       <div class="text-sm"><b>Cella:</b> ${r.cellKey || statusCellKey(r.subject)}</div>
       <div class="text-sm"><b>Oggetto:</b> ${r.subject}</div>
       ${Number.isFinite(r.temp)? `<div class="text-sm"><b>Temp rilevata:</b> ${r.temp.toFixed(1)}°C</div>`:''}
@@ -1605,6 +1676,7 @@ function renderStorico(){
             <th class="py-2 pr-3">Cella</th>
             <th class="py-2 pr-3">Oggetto</th>
             <th class="py-2 pr-3">Temp</th>
+            <th class="py-2 pr-3"> </th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -1612,7 +1684,7 @@ function renderStorico(){
     </div>`);
     const tb = table.querySelector('tbody');
     if (!rows.length){
-      tb.appendChild(el(`<tr><td colspan="5" class="py-3 text-slate-500">Nessun evento</td></tr>`));
+      tb.appendChild(el(`<tr><td colspan="6" class="py-3 text-slate-500">Nessun evento</td></tr>`));
     } else {
       rows.forEach(r=>{
         const tr = el(`<tr class="border-t hover:bg-slate-50 cursor-pointer" tabindex="0">
@@ -1621,6 +1693,7 @@ function renderStorico(){
           <td class="py-2 pr-3">${r.cellKey || statusCellKey(r.subject)}</td>
           <td class="py-2 pr-3">${r.subject}</td>
           <td class="py-2 pr-3">${Number.isFinite(r.temp)? (r.temp.toFixed(1)+'°C') : '—'}</td>
+          <td class="py-2 pr-3">${r.synthetic ? '<span class="px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-700 border border-slate-300">Sintetico</span>' : ''}</td>
         </tr>`);
         tr.addEventListener('click', ()=> openRowModal(fid, r));
         tr.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openRowModal(fid, r);} });
@@ -1633,12 +1706,20 @@ function renderStorico(){
 
 // MODIFICATO: Bugfix parentesi in exportCsv
 function exportCsv(){
-  const rowsOut = [['filiale','data','stato','cella','oggetto','temperatura']];  // RIMOSSA PARENTESI EXTRA
+  const rowsOut = [['filiale','data','stato','cella','oggetto','temperatura','sintetico']];
   for(const fid of Object.keys(state.history||{})){
     const filObj = (state.filiali||[]).find(x=>x.id===fid);
     const filName = filObj?.name || state.filialeNames[fid] || (state.history[fid]?.[0]?.displayName) || fid;
     (state.history[fid]||[]).forEach(r=>{
-      rowsOut.push([filName, new Date(r.date).toISOString(), r.status, r.cellKey||statusCellKey(r.subject), r.subject, Number.isFinite(r.temp)?r.temp.toFixed(2):'']);
+      rowsOut.push([
+        filName,
+        new Date(r.date).toISOString(),
+        r.status,
+        r.cellKey||statusCellKey(r.subject),
+        r.subject,
+        Number.isFinite(r.temp)?r.temp.toFixed(2):'',
+        r.synthetic ? 'true' : 'false'
+      ]);
     });
   }
   const csv = rowsOut.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
